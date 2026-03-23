@@ -1,4 +1,4 @@
-# Laura y Mar Finanzas
+# Finanzas Emprendimiento/Hogar
 
 Aplicación web de finanzas personales con interfaz neumórfica y teclado numérico integrado, diseñada para registrar ingresos y egresos con sincronización a Google Sheets.
 
