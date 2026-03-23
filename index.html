@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Laura y Mar Finanzas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #e0e5ec;
+            --primary: #4d7cff;
+            --secondary: #ff6b6b;
+            --success: #4caf50;
+            --warning: #ffce56;
+            --text-color: #4a4a4a;
+            --shadow-light: #ffffff;
+            --shadow-dark: #a3b1c6;
+            --font-family: 'Outfit', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-family);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- LAYOUT --- */
+        .app-view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            overflow-y: auto;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateX(100%);
+            z-index: 10;
+        }
+
+        .app-view.active {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateX(0);
+            z-index: 20;
+        }
+
+        #homeView {
+            justify-content: space-between;
+            overflow-y: hidden;
+        }
+
+        /* --- NEUMORPHISM --- */
+        .neu-flat {
+            background-color: var(--bg-color);
+            box-shadow: 9px 9px 16px var(--shadow-dark), -9px -9px 16px var(--shadow-light);
+            border-radius: 20px;
+            border: none;
+        }
+
+        .neu-btn {
+            background-color: var(--bg-color);
+            box-shadow: 6px 6px 10px var(--shadow-dark), -6px -6px 10px var(--shadow-light);
+            border-radius: 50%;
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.1s ease;
+        }
+
+        .neu-btn:active {
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+            transform: scale(0.95);
+        }
+
+        .neu-input {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 15px;
+            background: var(--bg-color);
+            box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+            font-size: 1rem;
+            color: var(--text-color);
+            outline: none;
+        }
+
+        /* --- COMPONENTS --- */
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-top: 5px;
+            min-height: 50px;
+        }
+
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            margin-right: 15px;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .app-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            flex: 1;
+        }
+
+        /* Home Top Bar */
+        .top-bar {
+            position: absolute;
+            top: 20px;
+            right: 0;
+            display: flex;
+            gap: 15px;
+            z-index: 50;
+        }
+
+        .icon-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            font-size: 1.5rem;
+            color: var(--primary);
+        }
+
+        /* Amount Display */
+        .display-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-end;
+            position: relative;
+        }
+
+        .amount-display {
+            font-size: 4rem;
+            font-weight: 300;
+            margin-bottom: 50px;
+        }
+
+        .action-grid {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+
+        .big-btn {
+            flex: 1;
+            padding: 20px;
+            border-radius: 25px;
+            font-size: 1.1rem;
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            box-shadow: 6px 6px 10px var(--shadow-dark), -6px -6px 10px var(--shadow-light);
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-ingreso {
+            background-color: var(--success);
+        }
+
+        .btn-egreso {
+            background-color: var(--secondary);
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+        }
+
+        .big-btn:active {
+            box-shadow: inset 3px 3px 5px rgba(0, 0, 0, 0.2);
+            transform: translateY(2px);
+        }
+
+        /* Numpad */
+        .numpad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            padding-bottom: 20px;
+        }
+
+        .num-key {
+            height: 65px;
+            width: 65px;
+            margin: 0 auto;
+            border-radius: 50%;
+            font-size: 1.5rem;
+        }
+
+        /* Stats Cards */
+        .chart-card {
+            padding: 15px;
+            margin-bottom: 20px;
+            position: relative;
+            min-height: 250px;
+        }
+
+        .summary-card {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 10px;
+            border-radius: 15px;
+            transition: background 0.2s;
+        }
+
+        .stat-item.interactive {
+            cursor: pointer;
+        }
+
+        .stat-item.interactive:active {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .stat-val {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .stat-val.income {
+            color: var(--success);
+        }
+
+        .stat-val.expense {
+            color: var(--secondary);
+        }
+
+        .stat-val.balance {
+            color: var(--text-color);
+        }
+
+        .stat-val.warning {
+            color: var(--warning);
+        }
+
+        /* Lists */
+        .list-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 40px;
+        }
+
+        .list-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+        .row-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .row-right {
+            font-weight: 600;
+        }
+
+        .chevron {
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        /* Preview Card */
+        .preview-card {
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .preview-amount {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin: 10px 0;
+        }
+
+        .preview-path {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 10px;
+            word-wrap: break-word;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-sheet {
+            background: var(--bg-color);
+            border-top-left-radius: 30px;
+            border-top-right-radius: 30px;
+            height: 80vh;
+            transform: translateY(100%);
+            transition: transform 0.3s ease-out;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-overlay.open .modal-sheet {
+            transform: translateY(0);
+        }
+
+        /* Utils */
+        .loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.7);
+            z-index: 200;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--primary);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .toast {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 15px 25px;
+            border-radius: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            z-index: 300;
+            display: none;
+            text-align: center;
+            font-weight: 600;
+            color: var(--primary);
+            width: 90%;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Utils -->
+    <div id="loader" class="loader-overlay">
+        <div class="spinner"></div>
+    </div>
+    <div id="toast" class="toast"></div>
+    <audio id="sfx-success" src="https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"></audio>
+
+    <!-- 1. HOME VIEW -->
+    <div id="homeView" class="app-view active">
+        <div class="display-area">
+            <div class="top-bar">
+                <button class="neu-btn icon-btn" onclick="forceRefresh()" title="Sincronizar">
+                    🔄
+                </button>
+                <button class="neu-btn icon-btn" onclick="openHogar()" title="Hogar">
+                    🏠
+                </button>
+                <button class="neu-btn icon-btn" onclick="openMarDePan()" title="Mar de Pan">
+                    🥖
+                </button>
+                <button class="neu-btn icon-btn" onclick="openTrends()" title="Evolución">
+                    📈
+                </button>
+                <button class="neu-btn icon-btn" onclick="openHistory()" title="Histórico">
+                    🕒
+                </button>
+            </div>
+            <div class="amount-display">
+                <span style="color:#aaa; font-size:2rem; margin-right:10px;">$</span>
+                <span id="displayAmount">0</span>
+            </div>
+        </div>
+
+        <div class="action-grid">
+            <button class="big-btn btn-ingreso" onclick="startTx('Ingreso')">Ingreso</button>
+            <button class="big-btn btn-egreso" onclick="startTx('Egreso')">Egreso</button>
+        </div>
+
+        <div class="numpad">
+            <button class="neu-btn num-key" onclick="pressNum('1')">1</button>
+            <button class="neu-btn num-key" onclick="pressNum('2')">2</button>
+            <button class="neu-btn num-key" onclick="pressNum('3')">3</button>
+            <button class="neu-btn num-key" onclick="pressNum('4')">4</button>
+            <button class="neu-btn num-key" onclick="pressNum('5')">5</button>
+            <button class="neu-btn num-key" onclick="pressNum('6')">6</button>
+            <button class="neu-btn num-key" onclick="pressNum('7')">7</button>
+            <button class="neu-btn num-key" onclick="pressNum('8')">8</button>
+            <button class="neu-btn num-key" onclick="pressNum('9')">9</button>
+            <button class="neu-btn num-key" onclick="pressNum('.')">.</button>
+            <button class="neu-btn num-key" onclick="pressNum('0')">0</button>
+            <button class="neu-btn num-key" onclick="pressNum('back')">⬅</button>
+        </div>
+    </div>
+
+    <!-- 2. HISTORY VIEW -->
+    <div id="historyView" class="app-view">
+        <div class="header">
+            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div class="app-title">Histórico</div>
+        </div>
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderHistory('total')">Total</button>
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderHistory('hogar')">Hogar</button>
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderHistory('mdp')">Mar de Pan</button>
+        </div>
+        <div class="summary-card neu-flat">
+            <div class="stat-item"><span class="stat-label">Total Ingresos</span><span id="globInc"
+                    class="stat-val income">$0</span></div>
+            <div class="stat-item"><span class="stat-label">Total Egresos</span><span id="globExp"
+                    class="stat-val expense">$0</span></div>
+            <div class="stat-item" style="grid-column: span 2"><span class="stat-label">Balance Total</span><span
+                    id="globBal" class="stat-val balance">$0</span></div>
+        </div>
+        <div class="chart-card neu-flat"><canvas id="historyChart"></canvas></div>
+        <h3 style="margin:20px 0 10px 0; color:#888; font-size:1rem;">MESES</h3>
+        <div id="monthList" class="list-container"></div>
+    </div>
+
+    <!-- 3. TRENDS VIEW (New) -->
+    <div id="trendsView" class="app-view">
+        <div class="header">
+            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div class="app-title">Evolución</div>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">Tasa de Ahorro (%)</h3>
+        <div class="chart-card neu-flat" style="height:220px;">
+            <canvas id="savingsTrendChart"></canvas>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">Costo de Vida (Gastos)</h3>
+        <div class="chart-card neu-flat" style="height:220px;">
+            <canvas id="expensesTrendChart"></canvas>
+        </div>
+
+        <div class="summary-card neu-flat">
+            <div class="stat-item">
+                <span class="stat-label">Promedio Ahorro</span>
+                <span id="avgSavings" class="stat-val" style="color:var(--primary)">0%</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Costo Promedio</span>
+                <span id="avgCost" class="stat-val expense">$0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. MAR DE PAN VIEW (New) -->
+    <div id="marDePanView" class="app-view">
+        <div class="header">
+            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div class="app-title">Mar de Pan</div>
+        </div>
+
+        <div class="summary-card neu-flat">
+            <div class="stat-item">
+                <span class="stat-label">Ingresos MP</span>
+                <span id="mdpInc" class="stat-val income">$0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Egresos MP</span>
+                <span id="mdpExp" class="stat-val expense">$0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Resultado</span>
+                <span id="mdpBal" class="stat-val balance">$0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Margen</span>
+                <span id="mdpMargin" class="stat-val warning">0%</span>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderMarDePan('all')">Historial</button>
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderMarDePan('6m')">Semestre</button>
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderMarDePan('3m')">Trimestre</button>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">Flujo Histórico</h3>
+        <div class="chart-card neu-flat" style="height:200px;">
+            <canvas id="mdpFlowChart"></canvas>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">Distribución de Gastos</h3>
+        <div class="chart-card neu-flat" style="height:250px;">
+            <canvas id="mdpCostChart"></canvas>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px; margin-top:20px;">Inversiones de Capital</h3>
+        <div class="summary-card neu-flat" style="grid-template-columns: 1fr; cursor: pointer;"
+            onclick="toggleInversiones()">
+            <div class="stat-item" style="flex-direction:row; justify-content:space-between; padding:5px 10px;">
+                <span class="stat-label" style="margin:0;">Total Invertido ▼</span>
+                <span id="mdpInversionesTot" class="stat-val" style="color:var(--primary)">$0</span>
+            </div>
+        </div>
+        <div id="mdpInversionesList" class="list-container" style="padding-bottom:10px; display: none;"></div>
+    </div>
+
+    <!-- 4.1 HOGAR VIEW (New) -->
+    <div id="hogarView" class="app-view">
+        <div class="header">
+            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div class="app-title">Hogar</div>
+        </div>
+
+        <div class="summary-card neu-flat">
+            <div class="stat-item">
+                <span class="stat-label">Ingresos Hogar</span>
+                <span id="hogarInc" class="stat-val income">$0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Egresos Hogar</span>
+                <span id="hogarExp" class="stat-val expense">$0</span>
+            </div>
+            <div class="stat-item" style="grid-column: span 2">
+                <span class="stat-label">Balance</span>
+                <span id="hogarBal" class="stat-val balance">$0</span>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderHogar('all')">Historial</button>
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderHogar('6m')">Semestre</button>
+            <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
+                onclick="renderHogar('3m')">Trimestre</button>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">Flujo Histórico Hogar</h3>
+        <div class="chart-card neu-flat" style="height:200px;">
+            <canvas id="hogarFlowChart"></canvas>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">Distribución de Gastos Hogar</h3>
+        <div class="chart-card neu-flat" style="height:250px;">
+            <canvas id="hogarCostChart"></canvas>
+        </div>
+    </div>
+
+
+    <!-- 5. MONTH/BREAKDOWN/SUB VIEWS (Existing Drilldown) -->
+    <div id="monthView" class="app-view">
+        <div class="header"><button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div id="monthTitle" class="app-title">Mes</div>
+        </div>
+        <div class="summary-card neu-flat">
+            <div class="stat-item interactive" onclick="drillDownMonth('Ingreso')"><span class="stat-label">Ingresos
+                    ➤</span><span id="monthInc" class="stat-val income">$0</span></div>
+            <div class="stat-item interactive" onclick="drillDownMonth('Egreso')"><span class="stat-label">Egresos
+                    ➤</span><span id="monthExp" class="stat-val expense">$0</span></div>
+            <div class="stat-item" style="grid-column: span 2"><span class="stat-label">Balance</span><span
+                    id="monthBal" class="stat-val balance">$0</span></div>
+        </div>
+        <div class="chart-card neu-flat"><canvas id="monthFlowChart"></canvas></div>
+    </div>
+
+    <div id="breakdownView" class="app-view">
+        <div class="header"><button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div id="breakTitle" class="app-title">Categorías</div>
+        </div>
+        <div class="chart-card neu-flat" style="height:300px;"><canvas id="breakChart"></canvas></div>
+        <h3 style="margin:20px 0 10px 0; color:#888; font-size:1rem;">DETALLE</h3>
+        <div id="breakList" class="list-container"></div>
+    </div>
+
+    <div id="subView" class="app-view">
+        <div class="header"><button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div id="subTitle" class="app-title">Subcategorías</div>
+        </div>
+        <div class="chart-card neu-flat" style="height:300px;"><canvas id="subChart"></canvas></div>
+        <div id="subList" class="list-container"></div>
+    </div>
+
+    <!-- 6. CONFIRM VIEW -->
+    <div id="confirmView" class="app-view">
+        <div class="header"><button class="neu-btn back-btn" onclick="cancelConfirm()">✕</button>
+            <div class="app-title">Confirmar</div>
+        </div>
+        <div class="neu-flat preview-card">
+            <div class="preview-path" id="prevPath">...</div>
+            <div class="preview-amount" id="prevAmount">$0</div>
+        </div>
+        <div style="margin-bottom:20px;">
+            <label style="color:#888; margin-bottom:10px; display:block;">Descripción (Opcional)</label>
+            <input type="text" id="descInput" class="neu-input" placeholder="Ej: Compra del domingo..."
+                spellcheck="false" autocomplete="off">
+        </div>
+        <button class="big-btn btn-primary" onclick="submitFinal()">GUARDAR</button>
+    </div>
+
+    <!-- MODAL -->
+    <div id="catModal" class="modal-overlay">
+        <div class="modal-sheet">
+            <div class="header"><button class="neu-btn back-btn" onclick="closeModal()">✖</button>
+                <div id="modalTitle" class="app-title">Seleccionar</div>
+            </div>
+            <div id="catList" class="list-container" style="flex:1; overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script>
+        const API_URL = CONFIG.API_URL;
+        const SCHEMA = CONFIG.SCHEMA;
+        const QUOTES = [
+            "El orden es la base de la abundancia.",
+            "El único bunker es la organización.",
+            "Sálvese quien pueBLa.",
+            "La claridad trae calma.",
+            "Sintropía en tus finanzas.",
+            "Gracias por los detalles",
+            "Energía que fluye, vida que crece.",
+            "La atención nutre nuestra economía.",
+            "Buen movimiento",
+            "Este gesto alimenta la visión"
+        ];
+
+        let TRANSACTIONS = JSON.parse(localStorage.getItem('FINANZAS_CACHE')) || [];
+        let HISTORY_MAP = {};
+        let currentTx = { type: '', category: '', subcategory: '', amount: 0, desc: '' };
+
+        // Globals for navigation state
+        let currentHistFilter = 'total';
+        let currentMdpFilter = 'all';
+        let currentHogarFilter = 'all';
+
+        if (TRANSACTIONS.length > 0) {
+            processHistory(); // Instant load from cache
+        }
+
+        function toggleInversiones() {
+            const list = document.getElementById('mdpInversionesList');
+            list.style.display = list.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        /* --- NAVIGATION --- */
+        const navStack = [];
+        function navigate(viewId, context = {}) {
+            const current = document.querySelector('.app-view.active');
+            if (current && current.id !== viewId) {
+                navStack.push({ id: current.id, context: window.currentContext });
+                current.classList.remove('active');
+            }
+            window.currentContext = context;
+            document.querySelectorAll('.app-view').forEach(v => { if (v.id !== viewId) v.classList.remove('active'); });
+            document.getElementById(viewId).classList.add('active');
+
+            // Trigger specific renders
+            if (viewId === 'historyView') renderHistory();
+            if (viewId === 'monthView') renderMonth(context.monthKey);
+            if (viewId === 'breakdownView') renderBreakdown(context.monthKey, context.type);
+            if (viewId === 'subView') renderSubBreakdown(context.monthKey, context.type, context.category);
+            if (viewId === 'trendsView') renderTrends();
+            if (viewId === 'marDePanView') renderMarDePan();
+            if (viewId === 'hogarView') renderHogar();
+        }
+
+        function goBack() {
+            if (navStack.length === 0) return;
+            const prev = navStack.pop();
+            document.querySelector('.app-view.active').classList.remove('active');
+            document.getElementById(prev.id).classList.add('active');
+            window.currentContext = prev.context;
+        }
+
+        /* --- BASIC LOGIC (Input, Modal, TX) --- */
+        let inputVal = "";
+        function pressNum(v) {
+            if (v === 'back') inputVal = inputVal.slice(0, -1);
+            else if (v === '.') { if (!inputVal.includes('.')) inputVal += '.'; }
+            else if (inputVal.length < 9) inputVal += v;
+            document.getElementById('displayAmount').innerText = inputVal || '0';
+        }
+
+        function startTx(type) {
+            if (!inputVal || parseFloat(inputVal) === 0) { alert("Monto cero?"); return; }
+            currentTx.type = type; currentTx.amount = parseFloat(inputVal);
+            openModal(type);
+        }
+        function openModal(type) {
+            document.getElementById('catModal').classList.add('open');
+            document.getElementById('modalTitle').innerText = `Elegir ${type}`;
+            const list = document.getElementById('catList'); list.innerHTML = '';
+            Object.keys(SCHEMA[type]).forEach(c => {
+                const row = document.createElement('div'); row.className = 'list-row neu-flat';
+                row.innerHTML = `<div class="row-left">${c}</div><div class="chevron">➤</div>`;
+                row.onclick = () => selectCat(type, c); list.appendChild(row);
+            });
+        }
+        function selectCat(type, cat) {
+            currentTx.category = cat;
+            const subcats = SCHEMA[type][cat];
+            if (subcats && subcats.length > 0) {
+                document.getElementById('modalTitle').innerText = cat;
+                const list = document.getElementById('catList'); list.innerHTML = '';
+                subcats.forEach(s => {
+                    const row = document.createElement('div'); row.className = 'list-row neu-flat';
+                    row.innerHTML = `<div class="row-left">${s}</div><div class="chevron">➤</div>`;
+                    row.onclick = () => confirmTx(s); list.appendChild(row);
+                });
+            } else confirmTx('');
+        }
+        function closeModal() { document.getElementById('catModal').classList.remove('open'); }
+        function confirmTx(sub) {
+            currentTx.subcategory = sub; closeModal();
+            document.getElementById('homeView').classList.remove('active');
+            document.getElementById('confirmView').classList.add('active');
+            document.getElementById('prevAmount').innerText = `$${currentTx.amount.toLocaleString()}`;
+            document.getElementById('prevPath').innerText = `${currentTx.type} / ${currentTx.category} ${sub ? '/ ' + sub : ''}`;
+            document.getElementById('descInput').value = '';
+            setTimeout(() => document.getElementById('descInput').focus(), 300);
+        }
+        function cancelConfirm() {
+            document.getElementById('confirmView').classList.remove('active');
+            document.getElementById('homeView').classList.add('active');
+        }
+        async function submitFinal() {
+            currentTx.desc = document.getElementById('descInput').value;
+            document.getElementById('confirmView').classList.remove('active');
+            document.getElementById('homeView').classList.add('active');
+
+            showLoader();
+            try {
+                await fetch(API_URL, {
+                    method: 'POST', mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'addTransaction', date: new Date().toISOString(), type: currentTx.type, category: currentTx.category, subcategory: currentTx.subcategory, amount: currentTx.amount, description: currentTx.desc })
+                });
+                inputVal = ""; document.getElementById('displayAmount').innerText = "0";
+                successEffects(); await fetchData(true);
+            } catch (e) { alert("Error de conexión"); }
+            hideLoader();
+        }
+
+        /* --- DATA & FETCH --- */
+        async function fetchData(force = false) {
+            if (!force && TRANSACTIONS.length > 0) {
+                // Sincronización silenciosa si ya tenemos caché
+                fetchSync();
+                return;
+            }
+            showLoader();
+            await fetchSync();
+            hideLoader();
+        }
+
+        async function fetchSync() {
+            try {
+                const res = await fetch(`${API_URL}?action=getRawData`);
+                const raw = await res.json();
+
+                // Actualizar solo si hay cambios (comparando longitud o string)
+                if (JSON.stringify(TRANSACTIONS) !== JSON.stringify(raw)) {
+                    TRANSACTIONS = raw;
+                    localStorage.setItem('FINANZAS_CACHE', JSON.stringify(raw));
+                    processHistory();
+
+                    // Re-renderizar panel activo
+                    const act = document.querySelector('.app-view.active');
+                    if (act) {
+                        if (act.id === 'historyView') renderHistory(currentHistFilter);
+                        if (act.id === 'trendsView') renderTrends();
+                        if (act.id === 'marDePanView') renderMarDePan(currentMdpFilter);
+                        if (act.id === 'hogarView') renderHogar(currentHogarFilter);
+                    }
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function forceRefresh() {
+            showLoader();
+            await fetchSync();
+            hideLoader();
+            const t = document.getElementById('toast');
+            t.innerText = "Sincronizado";
+            t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
+        }
+
+        // Cargar datos en el fondo ni bien abre la app
+        window.addEventListener('DOMContentLoaded', () => { fetchData(); });
+        function processHistory() {
+            HISTORY_MAP = {};
+            TRANSACTIONS.forEach(t => {
+                const mk = t.d.substring(0, 7);
+                if (!HISTORY_MAP[mk]) HISTORY_MAP[mk] = { inc: 0, exp: 0, txs: [] };
+                if (t.t === 'Ingreso') HISTORY_MAP[mk].inc += t.a;
+                else if (t.t === 'Egreso') HISTORY_MAP[mk].exp += t.a;
+                HISTORY_MAP[mk].txs.push(t);
+            });
+        }
+
+        /* --- VIEWS RENDERERS --- */
+        async function openHistory() { await fetchData(); navigate('historyView'); }
+        async function openTrends() { await fetchData(); navigate('trendsView'); }
+        async function openMarDePan() { await fetchData(); navigate('marDePanView'); }
+        async function openHogar() { await fetchData(); navigate('hogarView'); }
+
+        // HISTORY
+        let histChart = null;
+        function renderHistory(filterMode = currentHistFilter) {
+            currentHistFilter = filterMode;
+            let gInc = 0, gExp = 0;
+            const months = Object.keys(HISTORY_MAP).sort().reverse();
+            const list = document.getElementById('monthList'); list.innerHTML = '';
+            const chartLbl = [], chartInc = [], chartExp = [], chartBal = [];
+
+            [...months].reverse().forEach(m => {
+                const d = HISTORY_MAP[m];
+                let fInc = 0, fExp = 0;
+
+                d.txs.forEach(t => {
+                    const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
+                    const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
+                    const isMdp = isMdpInc || isMdpExp;
+
+                    if (filterMode === 'total' || (filterMode === 'mdp' && isMdp) || (filterMode === 'hogar' && !isMdp)) {
+                        if (t.t === 'Ingreso') fInc += t.a;
+                        if (t.t === 'Egreso') fExp += t.a;
+                    }
+                });
+
+                chartLbl.push(m); chartInc.push(fInc); chartExp.push(fExp); chartBal.push(fInc - fExp);
+            });
+
+            months.forEach(m => {
+                const d = HISTORY_MAP[m];
+                let fInc = 0, fExp = 0;
+
+                d.txs.forEach(t => {
+                    const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
+                    const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
+                    const isMdp = isMdpInc || isMdpExp;
+
+                    if (filterMode === 'total' || (filterMode === 'mdp' && isMdp) || (filterMode === 'hogar' && !isMdp)) {
+                        if (t.t === 'Ingreso') fInc += t.a;
+                        if (t.t === 'Egreso') fExp += t.a;
+                    }
+                });
+
+                gInc += fInc; gExp += fExp;
+                if (fInc === 0 && fExp === 0) return;
+
+                const div = document.createElement('div'); div.className = 'list-row neu-flat';
+                const bal = fInc - fExp;
+                div.innerHTML = `<div class="row-left"><span style="font-weight:bold">${m}</span></div>
+                <div class="row-right" style="text-align:right">
+                    <div style="font-size:0.8rem; color:var(--success)">In: $${fInc.toLocaleString()}</div>
+                    <div style="font-size:0.8rem; color:var(--secondary)">Out: $${fExp.toLocaleString()}</div>
+                    <div style="color:${bal >= 0 ? 'var(--text-color)' : 'var(--secondary)'}">Bal: $${bal.toLocaleString()}</div>
+                </div>`;
+                div.onclick = () => navigate('monthView', { monthKey: m });
+                list.appendChild(div);
+            });
+            document.getElementById('globInc').innerText = `$${gInc.toLocaleString()}`;
+            document.getElementById('globExp').innerText = `$${gExp.toLocaleString()}`;
+            document.getElementById('globBal').innerText = `$${(gInc - gExp).toLocaleString()}`;
+
+            if (histChart) histChart.destroy();
+            histChart = new Chart(document.getElementById('historyChart'), {
+                type: 'line',
+                data: {
+                    labels: chartLbl,
+                    datasets: [
+                        { label: 'Ingresos', data: chartInc, borderColor: '#4caf50', tension: 0.3 },
+                        { label: 'Egresos', data: chartExp, borderColor: '#ff6b6b', tension: 0.3 },
+                        { label: 'Balance', data: chartBal, borderColor: '#4d7cff', tension: 0.3 }
+                    ]
+                },
+                options: { plugins: { legend: { display: true, position: 'bottom' } }, maintainAspectRatio: false }
+            });
+        }
+
+        // TRENDS
+        let tSaveChart = null, tCostChart = null;
+        function renderTrends() {
+            const months = Object.keys(HISTORY_MAP).sort(); // Oldest to new
+            const labels = [];
+            const savingsData = [];
+            const costData = [];
+            let totalSavingsPct = 0; let count = 0;
+            let totalCost = 0;
+
+            months.forEach(m => {
+                const d = HISTORY_MAP[m];
+
+                let hInc = 0, hExp = 0;
+                d.txs.forEach(t => {
+                    const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
+                    const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
+                    if (!(isMdpInc || isMdpExp)) {
+                        if (t.t === 'Ingreso') hInc += t.a;
+                        else if (t.t === 'Egreso') hExp += t.a;
+                    }
+                });
+
+                if (hInc > 0 || hExp > 0) {
+                    labels.push(m);
+                    // Savings Rate
+                    const saving = hInc > 0 ? ((hInc - hExp) / hInc) * 100 : 0;
+                    savingsData.push(saving);
+                    totalSavingsPct += saving;
+
+                    // Cost
+                    costData.push(hExp);
+                    totalCost += hExp;
+                    count++;
+                }
+            });
+
+            // Metrics
+            const avgSave = count > 0 ? (totalSavingsPct / count).toFixed(1) : 0;
+            const avgCost = count > 0 ? Math.round(totalCost / count) : 0;
+            document.getElementById('avgSavings').innerText = `${avgSave}%`;
+            document.getElementById('avgCost').innerText = `$${avgCost.toLocaleString()}`;
+
+            // Chart 1: Savings
+            if (tSaveChart) tSaveChart.destroy();
+            tSaveChart = new Chart(document.getElementById('savingsTrendChart'), {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Ahorro %', data: savingsData,
+                        borderColor: '#4d7cff', backgroundColor: 'rgba(77, 124, 255, 0.1)',
+                        fill: true, tension: 0.4
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } }, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, max: 100 } }
+                }
+            });
+
+            // Chart 2: Costs
+            if (tCostChart) tCostChart.destroy();
+            tCostChart = new Chart(document.getElementById('expensesTrendChart'), {
+                type: 'bar', // Bar for volumes
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Gastos', data: costData,
+                        backgroundColor: '#ff6b6b', borderRadius: 5
+                    }]
+                },
+                options: { plugins: { legend: { display: false } }, maintainAspectRatio: false }
+            });
+        }
+
+        // MAR DE PAN
+        let mdpFlowChart = null, mdpCostChart = null;
+        function renderMarDePan(timeFilter = currentMdpFilter) {
+            currentMdpFilter = timeFilter;
+
+            // Filtro por fecha
+            const allMonths = Object.keys(HISTORY_MAP).sort();
+            let validMonths = allMonths;
+            if (timeFilter === '6m') validMonths = allMonths.slice(-6);
+            if (timeFilter === '3m') validMonths = allMonths.slice(-3);
+            const validMonthSet = new Set(validMonths);
+
+            // Filter Transactions
+            const mdpTxs = TRANSACTIONS.filter(t => {
+                const mk = t.d.substring(0, 7);
+                if (!validMonthSet.has(mk)) return false;
+
+                const isInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
+                const isExp = t.t === 'Egreso' && t.c === 'MarDePan';
+                return isInc || isExp;
+            });
+
+            // Totals
+            let totInc = 0, totExp = 0, totInv = 0;
+            const costBreakdown = {};
+            const flowByMonth = {}; // YYYY-MM -> {inc, exp}
+            const inversionesListItems = [];
+
+            mdpTxs.forEach(t => {
+                const mk = t.d.substring(0, 7);
+                if (!flowByMonth[mk]) flowByMonth[mk] = { inc: 0, exp: 0 };
+
+                if (t.t === 'Ingreso') {
+                    totInc += t.a;
+                    flowByMonth[mk].inc += t.a;
+                } else {
+                    if (t.s === 'Inversiones') {
+                        totInv += t.a;
+                        inversionesListItems.push(t);
+                    } else {
+                        totExp += t.a;
+                        flowByMonth[mk].exp += t.a;
+                        // Breakdown
+                        const s = t.s || 'Varios';
+                        if (!costBreakdown[s]) costBreakdown[s] = 0;
+                        costBreakdown[s] += t.a;
+                    }
+                }
+            });
+
+            const net = totInc - totExp;
+            const margin = totInc > 0 ? (net / totInc) * 100 : 0;
+
+            document.getElementById('mdpInc').innerText = `$${totInc.toLocaleString()}`;
+            document.getElementById('mdpExp').innerText = `$${totExp.toLocaleString()}`;
+            document.getElementById('mdpBal').innerText = `$${net.toLocaleString()}`;
+            document.getElementById('mdpMargin').innerText = `${margin.toFixed(1)}%`;
+
+            document.getElementById('mdpInversionesTot').innerText = `$${totInv.toLocaleString()}`;
+            const invListEl = document.getElementById('mdpInversionesList');
+            invListEl.innerHTML = '';
+
+            // Revertir para mostrar las mas recientes primero
+            inversionesListItems.reverse().forEach(inv => {
+                const div = document.createElement('div');
+                div.className = 'list-row neu-flat';
+                const descText = inv.desc ? inv.desc : (inv.d ? inv.d.substring(0, 10) : 'Inversión');
+                div.innerHTML = `<div class="row-left" style="font-size:0.9rem;">${descText}</div><div class="row-right" style="color:var(--primary)">$${inv.a.toLocaleString()}</div>`;
+                invListEl.appendChild(div);
+            });
+
+            // Chart 1: Line (Inc vs Exp)
+            const months = Object.keys(flowByMonth).sort();
+            const incData = months.map(m => flowByMonth[m].inc);
+            const expData = months.map(m => flowByMonth[m].exp);
+            const balData = months.map(m => flowByMonth[m].inc - flowByMonth[m].exp);
+
+            if (mdpFlowChart) mdpFlowChart.destroy();
+            mdpFlowChart = new Chart(document.getElementById('mdpFlowChart'), {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        { label: 'Ventas', data: incData, borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Costos', data: expData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255, 107, 107, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Balance', data: balData, borderColor: '#4d7cff', backgroundColor: 'transparent', fill: false, tension: 0.3 }
+                    ]
+                },
+                options: { maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' } } }
+            });
+
+            // Chart 2: Cost Breakdown
+            const sortedCosts = Object.entries(costBreakdown).sort((a, b) => b[1] - a[1]);
+            if (mdpCostChart) mdpCostChart.destroy();
+            mdpCostChart = new Chart(document.getElementById('mdpCostChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: sortedCosts.map(x => x[0]),
+                    datasets: [{
+                        data: sortedCosts.map(x => x[1]),
+                        backgroundColor: sortedCosts.map(i => `hsl(${Math.random() * 360}, 70%, 70%)`),
+                        borderWidth: 0
+                    }]
+                },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+        }
+
+        // HOGAR
+        let hogarFlowChart = null, hogarCostChart = null;
+        function renderHogar(timeFilter = currentHogarFilter) {
+            currentHogarFilter = timeFilter;
+
+            // Filtro por fecha
+            const allMonths = Object.keys(HISTORY_MAP).sort();
+            let validMonths = allMonths;
+            if (timeFilter === '6m') validMonths = allMonths.slice(-6);
+            if (timeFilter === '3m') validMonths = allMonths.slice(-3);
+            const validMonthSet = new Set(validMonths);
+
+            // Filter Transactions
+            const hogarTxs = TRANSACTIONS.filter(t => {
+                const mk = t.d.substring(0, 7);
+                if (!validMonthSet.has(mk)) return false;
+
+                const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
+                const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
+                return !(isMdpInc || isMdpExp);
+            });
+
+            // Totals
+            let totInc = 0, totExp = 0;
+            const costBreakdown = {};
+            const flowByMonth = {};
+
+            hogarTxs.forEach(t => {
+                const mk = t.d.substring(0, 7);
+                if (!flowByMonth[mk]) flowByMonth[mk] = { inc: 0, exp: 0 };
+
+                if (t.t === 'Ingreso') {
+                    totInc += t.a;
+                    flowByMonth[mk].inc += t.a;
+                } else {
+                    totExp += t.a;
+                    flowByMonth[mk].exp += t.a;
+                    // Breakdown by Category
+                    const c = t.c || 'Varios';
+                    if (!costBreakdown[c]) costBreakdown[c] = 0;
+                    costBreakdown[c] += t.a;
+                }
+            });
+
+            const net = totInc - totExp;
+
+            document.getElementById('hogarInc').innerText = `$${totInc.toLocaleString()}`;
+            document.getElementById('hogarExp').innerText = `$${totExp.toLocaleString()}`;
+            document.getElementById('hogarBal').innerText = `$${net.toLocaleString()}`;
+
+            // Chart 1: Line
+            const months = Object.keys(flowByMonth).sort();
+            const incData = months.map(m => flowByMonth[m].inc);
+            const expData = months.map(m => flowByMonth[m].exp);
+            const balData = months.map(m => flowByMonth[m].inc - flowByMonth[m].exp);
+
+            if (hogarFlowChart) hogarFlowChart.destroy();
+            hogarFlowChart = new Chart(document.getElementById('hogarFlowChart'), {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        { label: 'Ingresos', data: incData, borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Egresos', data: expData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255, 107, 107, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Balance', data: balData, borderColor: '#4d7cff', backgroundColor: 'transparent', fill: false, tension: 0.3 }
+                    ]
+                },
+                options: { maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' } } }
+            });
+
+            // Chart 2: Cost Breakdown
+            const sortedCosts = Object.entries(costBreakdown).sort((a, b) => b[1] - a[1]);
+            if (hogarCostChart) hogarCostChart.destroy();
+            hogarCostChart = new Chart(document.getElementById('hogarCostChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: sortedCosts.map(x => x[0]),
+                    datasets: [{
+                        data: sortedCosts.map(x => x[1]),
+                        backgroundColor: sortedCosts.map(i => `hsl(${Math.random() * 360}, 70%, 70%)`),
+                        borderWidth: 0
+                    }]
+                },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+            });
+        }
+
+
+        /* --- DRILLDOWNS (Month/Cat/Sub) --- */
+        let mChart = null, bChart = null, sChart = null;
+        function renderMonth(key) {
+            document.getElementById('monthTitle').innerText = key;
+            const d = HISTORY_MAP[key] || { inc: 0, exp: 0 };
+            document.getElementById('monthInc').innerText = `$${d.inc.toLocaleString()}`;
+            document.getElementById('monthExp').innerText = `$${d.exp.toLocaleString()}`;
+            document.getElementById('monthBal').innerText = `$${(d.inc - d.exp).toLocaleString()}`;
+            if (mChart) mChart.destroy();
+            mChart = new Chart(document.getElementById('monthFlowChart').getContext('2d'), {
+                type: 'bar', data: { labels: ['Ing', 'Egr'], datasets: [{ data: [d.inc, d.exp], backgroundColor: ['#4caf50', '#ff6b6b'], borderRadius: 15 }] },
+                options: { plugins: { legend: { display: false } }, maintainAspectRatio: false }
+            });
+        }
+        function drillDownMonth(type) { navigate('breakdownView', { monthKey: window.currentContext.monthKey, type: type }); }
+
+        function renderBreakdown(key, type) {
+            document.getElementById('breakTitle').innerText = `${key} - ${type}`;
+            const txs = HISTORY_MAP[key].txs.filter(t => t.t === type);
+            const agg = {}; txs.forEach(t => { if (!agg[t.c]) agg[t.c] = 0; agg[t.c] += t.a; });
+            const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+            const list = document.getElementById('breakList'); list.innerHTML = '';
+            sorted.forEach(([c, a]) => {
+                const row = document.createElement('div'); row.className = 'list-row neu-flat';
+                row.innerHTML = `<div class="row-left">${c}</div><div class="row-right">$${a.toLocaleString()} ➤</div>`;
+                row.onclick = () => navigate('subView', { monthKey: key, type: type, category: c });
+                list.appendChild(row);
+            });
+            if (bChart) bChart.destroy();
+            bChart = new Chart(document.getElementById('breakChart'), {
+                type: 'doughnut', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => `hsl(${Math.random() * 360},70%,70%)`), borderWidth: 0 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+        function renderSubBreakdown(key, type, cat) {
+            document.getElementById('subTitle').innerText = cat;
+            const txs = HISTORY_MAP[key].txs.filter(t => t.t === type && t.c === cat);
+            const agg = {}; txs.forEach(t => { const s = t.s || 'General'; if (!agg[s]) agg[s] = 0; agg[s] += t.a; });
+            const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
+            const list = document.getElementById('subList'); list.innerHTML = '';
+            sorted.forEach(([s, a]) => {
+                const div = document.createElement('div'); div.className = 'list-row neu-flat';
+                const subTxs = txs.filter(t => (t.s || 'General') === s);
+                let desc = subTxs.slice(0, 3).map(tx => tx.desc ? `• ${tx.desc}` : '').filter(d => d).join('<br>'); // Simplified
+                div.innerHTML = `<div style="flex:1;"><div>${s}</div><div style="font-size:0.8rem;color:#888;margin-top:5px;">${desc}</div></div><div class="row-right">$${a.toLocaleString()}</div>`;
+                list.appendChild(div);
+            });
+            if (sChart) sChart.destroy();
+            sChart = new Chart(document.getElementById('subChart'), {
+                type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => `hsl(${Math.random() * 360},70%,70%)`), borderWidth: 0 }] },
+                options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+
+        function showLoader() { document.getElementById('loader').style.display = 'flex'; }
+        function hideLoader() { document.getElementById('loader').style.display = 'none'; }
+        function successEffects() {
+            const t = document.getElementById('toast'); t.innerText = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+            t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 4000);
+            document.getElementById('sfx-success').play().catch(e => { });
+            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        }
+    </script>
+</body>
+
+</html>
