@@ -829,7 +829,7 @@
             try {
                 // Modo demo: guardar solo en localStorage
                 if (!API_URL) {
-                    TRANSACTIONS.push({ type: currentTx.type, category: currentTx.category, subcategory: currentTx.subcategory, amount: currentTx.amount, date: new Date().toISOString().slice(0,10), description: currentTx.desc });
+                    TRANSACTIONS.push({ d: new Date().toISOString().slice(0,10), t: currentTx.type, c: currentTx.category, s: currentTx.subcategory, a: currentTx.amount, desc: currentTx.desc });
                     localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
                     processHistory();
                     inputVal = ""; document.getElementById('displayAmount').innerText = "0";
