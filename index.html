@@ -690,10 +690,24 @@
         </div>
     </div>
 
-    <script src="config.js"></script>
     <script>
-        const API_URL = CONFIG.API_URL;
-        const SCHEMA = CONFIG.SCHEMA;
+        // --- MODO DEMO (portafolio) ---
+        // Para uso personal: editá API_URL y SCHEMA con tus datos reales
+        const API_URL = '';
+
+        const SCHEMA = {
+            Egreso: {
+                Alimentacion: ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
+                HogarYVida: ['Familia', 'Regalos', 'Varios', 'Salud', 'Actividades', 'Salidas', 'Indumentaria', 'Mascota', 'Servicios', 'Mantenimiento', 'Infraestructura'],
+                MarDePan: ['Sueldos', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento', 'Extracción'],
+                Movilidad: ['Seguro', 'Peajes', 'Nafta', 'Mecánica', 'Transporte'],
+                Proyectos: ['Proyecto A', 'Proyecto B', 'Proyecto C', 'MVP', 'Inversión'],
+            },
+            Ingreso: {
+                'Mar de Pan': ['Facturación', 'Otros'],
+                'Hogar': ['Fuente 1', 'Fuente 2', 'Fuente 3', 'Fuente 4', 'Changas', 'Otros']
+            }
+        };
         const QUOTES = [
             "El orden es la base de la abundancia.",
             "El único bunker es la organización.",
@@ -813,6 +827,18 @@
 
             showLoader();
             try {
+                // Modo demo: guardar solo en localStorage
+                if (!API_URL) {
+                    TRANSACTIONS.push({ type: currentTx.type, category: currentTx.category, subcategory: currentTx.subcategory, amount: currentTx.amount, date: new Date().toISOString().slice(0,10), description: currentTx.desc });
+                    localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
+                    processHistory();
+                    inputVal = ""; document.getElementById('displayAmount').innerText = "0";
+                    goTo('homeView');
+                    successEffects();
+                    hideLoader();
+                    return;
+                }
+
                 await fetch(API_URL, {
                     method: 'POST', mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
@@ -837,6 +863,7 @@
         }
 
         async function fetchSync() {
+            if (!API_URL) return;
             try {
                 const res = await fetch(`${API_URL}?action=getRawData`);
                 const raw = await res.json();
