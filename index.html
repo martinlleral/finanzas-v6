@@ -900,6 +900,7 @@
         function processHistory() {
             HISTORY_MAP = {};
             TRANSACTIONS.forEach(t => {
+                if (!t || !t.d) return;
                 const mk = t.d.substring(0, 7);
                 if (!HISTORY_MAP[mk]) HISTORY_MAP[mk] = { inc: 0, exp: 0, txs: [] };
                 if (t.t === 'Ingreso') HISTORY_MAP[mk].inc += t.a;
