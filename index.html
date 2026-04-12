@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Finanzas Emprendimiento/Hogar</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -11,13 +11,15 @@
     <style>
         :root {
             --bg-color: #e0e5ec;
-            --primary: #4d7cff;
-            --secondary: #ff6b6b;
-            --success: #4caf50;
-            --warning: #ffce56;
-            --text-color: #4a4a4a;
+            --primary: #1a4dff;
+            --secondary: #c62828;
+            --success: #2e7d32;
+            --warning: #a76a00;
+            --text-color: #3a3a3a;
+            --text-muted: #5e5e5e;
+            --text-subtle: #6b6b6b;
             --shadow-light: #ffffff;
-            --shadow-dark: #a3b1c6;
+            --shadow-dark: #8ea0bb;
             --font-family: 'Outfit', sans-serif;
         }
 
@@ -26,6 +28,35 @@
             padding: 0;
             box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Focus visible global para accesibilidad (WCAG 2.4.7) */
+        :focus-visible {
+            outline: 3px solid #1a4dff;
+            outline-offset: 3px;
+            border-radius: 4px;
+        }
+
+        /* Respeto a usuarios con preferencia de movimiento reducido (WCAG 2.3.3) */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                transition-duration: 0.01ms !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
+        }
+
+        /* Utility clase para labels ocultos visualmente pero disponibles para lectores */
+        .visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
         }
 
         body {
@@ -164,6 +195,7 @@
             font-size: 4rem;
             font-weight: 300;
             margin-bottom: 50px;
+            font-variant-numeric: tabular-nums;
         }
 
         .action-grid {
@@ -256,13 +288,14 @@
 
         .stat-label {
             font-size: 0.8rem;
-            color: #888;
+            color: #5e5e5e;
             margin-bottom: 5px;
         }
 
         .stat-val {
-            font-size: 1.1rem;
+            font-size: 1.5rem;
             font-weight: 600;
+            font-variant-numeric: tabular-nums;
         }
 
         .stat-val.income {
@@ -309,7 +342,7 @@
         }
 
         .chevron {
-            color: #aaa;
+            color: #6b6b6b;
             font-size: 0.9rem;
         }
 
@@ -329,7 +362,7 @@
 
         .preview-path {
             font-size: 0.9rem;
-            color: #888;
+            color: #5e5e5e;
             margin-bottom: 10px;
             word-wrap: break-word;
         }
@@ -441,35 +474,35 @@
     <div id="loader" class="loader-overlay">
         <div class="spinner"></div>
     </div>
-    <div id="toast" class="toast"></div>
-    <div id="demoBadge" class="demo-badge" style="display:none;">DEMO — datos ficticios</div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="demoBadge" class="demo-badge" style="display:none;" role="status">DEMO — datos ficticios</div>
     <audio id="sfx-success" src="https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"></audio>
 
     <!-- 1. HOME VIEW -->
     <div id="homeView" class="app-view active">
         <div class="display-area">
-            <div class="top-bar">
-                <button id="syncBtn" class="neu-btn icon-btn" onclick="forceRefresh()" title="Sincronizar">
-                    🔄
+            <nav class="top-bar" aria-label="Navegación principal">
+                <button id="syncBtn" class="neu-btn icon-btn" onclick="forceRefresh()" aria-label="Sincronizar con servidor">
+                    <span aria-hidden="true">🔄</span>
                 </button>
-                <button class="neu-btn icon-btn" onclick="openConfig()" title="Configuración">
-                    ⚙️
+                <button class="neu-btn icon-btn" onclick="openConfig()" aria-label="Configuración">
+                    <span aria-hidden="true">⚙️</span>
                 </button>
-                <button class="neu-btn icon-btn" onclick="openHogar()" title="Hogar">
-                    🏠
+                <button class="neu-btn icon-btn" onclick="openHogar()" aria-label="Ver Hogar">
+                    <span aria-hidden="true">🏠</span>
                 </button>
-                <button class="neu-btn icon-btn" onclick="openMarDePan()" title="Mar de Pan">
-                    🥖
+                <button class="neu-btn icon-btn" onclick="openMarDePan()" aria-label="Ver Mar de Pan">
+                    <span aria-hidden="true">🥖</span>
                 </button>
-                <button class="neu-btn icon-btn" onclick="openTrends()" title="Evolución">
-                    📈
+                <button class="neu-btn icon-btn" onclick="openTrends()" aria-label="Ver Evolución">
+                    <span aria-hidden="true">📈</span>
                 </button>
-                <button class="neu-btn icon-btn" onclick="openHistory()" title="Histórico">
-                    🕒
+                <button class="neu-btn icon-btn" onclick="openHistory()" aria-label="Ver Histórico">
+                    <span aria-hidden="true">🕒</span>
                 </button>
-            </div>
+            </nav>
             <div class="amount-display">
-                <span style="color:#aaa; font-size:2rem; margin-right:10px;">$</span>
+                <span style="color:#6b6b6b; font-size:2rem; margin-right:10px;">$</span>
                 <span id="displayAmount">0</span>
             </div>
         </div>
@@ -491,14 +524,14 @@
             <button class="neu-btn num-key" onclick="pressNum('9')">9</button>
             <button class="neu-btn num-key" onclick="pressNum('.')">.</button>
             <button class="neu-btn num-key" onclick="pressNum('0')">0</button>
-            <button class="neu-btn num-key" onclick="pressNum('back')">⬅</button>
+            <button class="neu-btn num-key" onclick="pressNum('back')" aria-label="Borrar último dígito"><span aria-hidden="true">⬅</span></button>
         </div>
     </div>
 
     <!-- 2. HISTORY VIEW -->
     <div id="historyView" class="app-view">
         <div class="header">
-            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div class="app-title">Histórico</div>
         </div>
         <div style="display:flex; gap:10px; margin-bottom:15px;">
@@ -509,6 +542,7 @@
             <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
                 onclick="renderHistory('mdp')">Mar de Pan</button>
         </div>
+        <label for="histSearch" class="visually-hidden">Buscar transacciones</label>
         <input type="text" id="histSearch" class="neu-input" placeholder="🔍 Buscar: Amadeo, Nafta, Sueldos..."
             style="margin-bottom:15px;" spellcheck="false" autocomplete="off" oninput="runSearch()">
         <div id="searchResults" style="display:none;"></div>
@@ -522,7 +556,7 @@
                         id="globBal" class="stat-val balance">$0</span></div>
             </div>
             <div class="chart-card neu-flat"><canvas id="historyChart"></canvas></div>
-            <h3 style="margin:20px 0 10px 0; color:#888; font-size:1rem;">MESES</h3>
+            <h3 style="margin:20px 0 10px 0; color:#5e5e5e; font-size:1rem;">MESES</h3>
             <div id="monthList" class="list-container"></div>
         </div>
     </div>
@@ -530,7 +564,7 @@
     <!-- 3. TRENDS VIEW (New) -->
     <div id="trendsView" class="app-view">
         <div class="header">
-            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div class="app-title">Evolución</div>
         </div>
 
@@ -559,7 +593,7 @@
     <!-- 4. MAR DE PAN VIEW (New) -->
     <div id="marDePanView" class="app-view">
         <div class="header">
-            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div class="app-title">Mar de Pan</div>
         </div>
 
@@ -578,7 +612,7 @@
             </div>
             <div class="stat-item">
                 <span class="stat-label">Margen</span>
-                <span id="mdpMargin" class="stat-val warning">0%</span>
+                <span id="mdpMargin" class="stat-val" style="color:var(--primary)">0%</span>
             </div>
         </div>
 
@@ -615,7 +649,7 @@
     <!-- 4.1 HOGAR VIEW (New) -->
     <div id="hogarView" class="app-view">
         <div class="header">
-            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div class="app-title">Hogar</div>
         </div>
 
@@ -658,13 +692,13 @@
     <!-- 4.2 CONFIG VIEW (New) -->
     <div id="configView" class="app-view">
         <div class="header">
-            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div class="app-title">Configuración</div>
         </div>
 
         <h3 style="color:#555; margin-bottom:10px;">🔗 Conexión</h3>
         <div class="neu-flat" style="padding:15px; margin-bottom:20px;">
-            <div style="font-size:0.8rem; color:#888; margin-bottom:5px;">API URL (Google Apps Script)</div>
+            <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:5px;">API URL (Google Apps Script)</div>
             <div id="cfgApiUrlDisplay" style="font-size:0.85rem; word-break:break-all; color:#555; margin-bottom:10px;">(no configurada)</div>
             <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="configureApi()">Cambiar URL</button>
         </div>
@@ -678,7 +712,7 @@
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addCategory('Ingreso')">+ Agregar categoría de ingreso</button>
 
         <h3 style="color:#555; margin-bottom:10px;">🔄 Alias (agrupamiento histórico)</h3>
-        <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "MarDePan" → "Mar de Pan".</div>
+        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "MarDePan" → "Mar de Pan".</div>
         <div id="cfgAliasList" class="list-container" style="padding-bottom:10px;"></div>
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addAlias()">+ Agregar alias</button>
 
@@ -690,7 +724,7 @@
 
     <!-- 5. MONTH/BREAKDOWN/SUB VIEWS (Existing Drilldown) -->
     <div id="monthView" class="app-view">
-        <div class="header"><button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+        <div class="header"><button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div id="monthTitle" class="app-title">Mes</div>
         </div>
         <div class="summary-card neu-flat">
@@ -705,16 +739,16 @@
     </div>
 
     <div id="breakdownView" class="app-view">
-        <div class="header"><button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+        <div class="header"><button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div id="breakTitle" class="app-title">Categorías</div>
         </div>
         <div class="chart-card neu-flat" style="height:300px;"><canvas id="breakChart"></canvas></div>
-        <h3 style="margin:20px 0 10px 0; color:#888; font-size:1rem;">DETALLE</h3>
+        <h3 style="margin:20px 0 10px 0; color:#5e5e5e; font-size:1rem;">DETALLE</h3>
         <div id="breakList" class="list-container"></div>
     </div>
 
     <div id="subView" class="app-view">
-        <div class="header"><button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+        <div class="header"><button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div id="subTitle" class="app-title">Subcategorías</div>
         </div>
         <div class="chart-card neu-flat" style="height:300px;"><canvas id="subChart"></canvas></div>
@@ -723,7 +757,7 @@
 
     <!-- 6. CONFIRM VIEW -->
     <div id="confirmView" class="app-view">
-        <div class="header"><button class="neu-btn back-btn" onclick="cancelConfirm()">✕</button>
+        <div class="header"><button class="neu-btn back-btn" onclick="cancelConfirm()" aria-label="Cancelar"><span aria-hidden="true">✕</span></button>
             <div class="app-title">Confirmar</div>
         </div>
         <div class="neu-flat preview-card">
@@ -731,7 +765,7 @@
             <div class="preview-amount" id="prevAmount">$0</div>
         </div>
         <div style="margin-bottom:20px;">
-            <label style="color:#888; margin-bottom:10px; display:block;">Descripción (Opcional)</label>
+            <label for="descInput" style="color:#5e5e5e; margin-bottom:10px; display:block;">Descripción (Opcional)</label>
             <input type="text" id="descInput" class="neu-input" placeholder="Ej: Compra del domingo..."
                 spellcheck="false" autocomplete="off">
         </div>
@@ -741,7 +775,7 @@
     <!-- MODAL -->
     <div id="catModal" class="modal-overlay">
         <div class="modal-sheet">
-            <div class="header"><button class="neu-btn back-btn" onclick="closeModal()">✖</button>
+            <div class="header"><button class="neu-btn back-btn" onclick="closeModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
                 <div id="modalTitle" class="app-title">Seleccionar</div>
             </div>
             <div id="catList" class="list-container" style="flex:1; overflow-y:auto;"></div>
@@ -761,7 +795,7 @@
             Egreso: {
                 'Alimentación': ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
                 'HogarYVida': ['Familia', 'Regalos', 'Varios', 'Salud', 'Actividades', 'Salidas', 'Indumentaria', 'Mascota', 'Servicios', 'Mantenimiento', 'Infraestructura'],
-                'Mar de Pan': ['Sueldos', 'Sueldo', 'Alquiler', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento', 'Extracción'],
+                'Mar de Pan': ['Sueldos', 'Alquiler', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento', 'Extracción'],
                 'Movilidad': ['Seguro', 'Peajes', 'Nafta', 'Mecánica', 'Transporte'],
                 'Proyectos': [],
             },
@@ -772,6 +806,9 @@
         };
 
         // Alias por defecto para agrupar variantes históricas
+        // NOTA: los alias aplican a nombres de CATEGORÍA, no de subcategoría.
+        // Para unificar subcategorías (como "Sueldo"→"Sueldos") la lógica de agrupamiento
+        // se aplica donde se procesan subs, no acá.
         const ALIASES_DEFAULT = {
             'MarDePan': 'Mar de Pan',
             'Alimentacion': 'Alimentación'
@@ -900,6 +937,35 @@
             return ALIASES[c] || c;
         }
 
+        // Alias de subcategorías para agrupar tipeos históricos (ej: "Sueldo" vs "Sueldos")
+        const SUB_ALIASES = { 'Sueldo': 'Sueldos' };
+        function normalizeSub(s) {
+            return SUB_ALIASES[s] || s;
+        }
+
+        // Paleta determinística para charts: misma categoría = mismo color siempre
+        const CHART_PALETTE = [
+            '#1a4dff', '#c62828', '#2e7d32', '#a76a00',
+            '#6a4c93', '#00838f', '#e65100', '#4527a0',
+            '#558b2f', '#ad1457', '#01579b', '#4e342e'
+        ];
+        function colorFor(label) {
+            let hash = 0;
+            const s = String(label || '');
+            for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0;
+            return CHART_PALETTE[Math.abs(hash) % CHART_PALETTE.length];
+        }
+
+        // Escapa HTML para prevenir XSS en interpolaciones
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         /* --- BASIC LOGIC (Input, Modal, TX) --- */
         let inputVal = "";
         function pressNum(v) {
@@ -910,8 +976,9 @@
         }
 
         function startTx(type) {
-            if (!inputVal || parseFloat(inputVal) === 0) { alert("Monto cero?"); return; }
-            currentTx.type = type; currentTx.amount = parseFloat(inputVal);
+            const amount = parseFloat(inputVal);
+            if (!inputVal || isNaN(amount) || amount <= 0) { alert("Ingresá un monto válido"); return; }
+            currentTx.type = type; currentTx.amount = amount;
             openModal(type);
         }
         function openModal(type) {
@@ -920,7 +987,7 @@
             const list = document.getElementById('catList'); list.innerHTML = '';
             Object.keys(SCHEMA[type]).forEach(c => {
                 const row = document.createElement('div'); row.className = 'list-row neu-flat';
-                row.innerHTML = `<div class="row-left">${c}</div><div class="chevron">➤</div>`;
+                row.innerHTML = `<div class="row-left">${esc(c)}</div><div class="chevron" aria-hidden="true">➤</div>`;
                 row.onclick = () => selectCat(type, c); list.appendChild(row);
             });
         }
@@ -932,7 +999,7 @@
                 const list = document.getElementById('catList'); list.innerHTML = '';
                 subcats.forEach(s => {
                     const row = document.createElement('div'); row.className = 'list-row neu-flat';
-                    row.innerHTML = `<div class="row-left">${s}</div><div class="chevron">➤</div>`;
+                    row.innerHTML = `<div class="row-left">${esc(s)}</div><div class="chevron" aria-hidden="true">➤</div>`;
                     row.onclick = () => confirmTx(s); list.appendChild(row);
                 });
             } else confirmTx('');
@@ -1142,6 +1209,8 @@
 
         // Soporte de teclado físico (numpad incluido) en la vista Home
         document.addEventListener('keydown', (e) => {
+            // No interceptar combinaciones con modificadores (Cmd+R, Ctrl+L, Cmd+1..9, etc.)
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
             // No interceptar si el foco está en un campo de texto
             const tag = document.activeElement?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA') return;
@@ -1157,10 +1226,12 @@
                 e.preventDefault(); pressNum('back');
             } else if (key === 'Enter') {
                 e.preventDefault();
-                if (inputVal && parseFloat(inputVal) !== 0) startTx('Egreso');
+                const a = parseFloat(inputVal);
+                if (inputVal && !isNaN(a) && a > 0) startTx('Egreso');
             } else if (key === '+') {
                 e.preventDefault();
-                if (inputVal && parseFloat(inputVal) !== 0) startTx('Ingreso');
+                const a = parseFloat(inputVal);
+                if (inputVal && !isNaN(a) && a > 0) startTx('Ingreso');
             } else if (key === 'Escape') {
                 e.preventDefault(); inputVal = ''; document.getElementById('displayAmount').innerText = '0';
             }
@@ -1385,7 +1456,7 @@
                         totExp += t.a;
                         flowByMonth[mk].exp += t.a;
                         // Breakdown
-                        const s = t.s || 'Varios';
+                        const s = normalizeSub(t.s || 'Varios');
                         if (!costBreakdown[s]) costBreakdown[s] = 0;
                         costBreakdown[s] += t.a;
                     }
@@ -1409,7 +1480,7 @@
                 const div = document.createElement('div');
                 div.className = 'list-row neu-flat';
                 const descText = inv.desc ? inv.desc : (inv.d ? inv.d.substring(0, 10) : 'Inversión');
-                div.innerHTML = `<div class="row-left" style="font-size:0.9rem;">${descText}</div><div class="row-right" style="color:var(--primary)">$${inv.a.toLocaleString()}</div>`;
+                div.innerHTML = `<div class="row-left" style="font-size:0.9rem;">${esc(descText)}</div><div class="row-right" style="color:var(--primary)">$${inv.a.toLocaleString()}</div>`;
                 invListEl.appendChild(div);
             });
 
@@ -1442,7 +1513,7 @@
                     labels: sortedCosts.map(x => x[0]),
                     datasets: [{
                         data: sortedCosts.map(x => x[1]),
-                        backgroundColor: sortedCosts.map(i => `hsl(${Math.random() * 360}, 70%, 70%)`),
+                        backgroundColor: sortedCosts.map(i => colorFor(i[0])),
                         borderWidth: 0
                     }]
                 },
@@ -1527,7 +1598,7 @@
                     labels: sortedCosts.map(x => x[0]),
                     datasets: [{
                         data: sortedCosts.map(x => x[1]),
-                        backgroundColor: sortedCosts.map(i => `hsl(${Math.random() * 360}, 70%, 70%)`),
+                        backgroundColor: sortedCosts.map(i => colorFor(i[0])),
                         borderWidth: 0
                     }]
                 },
@@ -1560,32 +1631,32 @@
             const list = document.getElementById('breakList'); list.innerHTML = '';
             sorted.forEach(([c, a]) => {
                 const row = document.createElement('div'); row.className = 'list-row neu-flat';
-                row.innerHTML = `<div class="row-left">${c}</div><div class="row-right">$${a.toLocaleString()} ➤</div>`;
+                row.innerHTML = `<div class="row-left">${esc(c)}</div><div class="row-right">$${a.toLocaleString()} <span aria-hidden="true">➤</span></div>`;
                 row.onclick = () => navigate('subView', { monthKey: key, type: type, category: c });
                 list.appendChild(row);
             });
             if (bChart) bChart.destroy();
             bChart = new Chart(document.getElementById('breakChart'), {
-                type: 'doughnut', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => `hsl(${Math.random() * 360},70%,70%)`), borderWidth: 0 }] },
+                type: 'doughnut', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
                 options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
             });
         }
         function renderSubBreakdown(key, type, cat) {
             document.getElementById('subTitle').innerText = cat;
             const txs = HISTORY_MAP[key].txs.filter(t => t.t === type && normalizeCat(t.c) === cat);
-            const agg = {}; txs.forEach(t => { const s = t.s || 'General'; if (!agg[s]) agg[s] = 0; agg[s] += t.a; });
+            const agg = {}; txs.forEach(t => { const s = normalizeSub(t.s || 'General'); if (!agg[s]) agg[s] = 0; agg[s] += t.a; });
             const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
             const list = document.getElementById('subList'); list.innerHTML = '';
             sorted.forEach(([s, a]) => {
                 const div = document.createElement('div'); div.className = 'list-row neu-flat';
-                const subTxs = txs.filter(t => (t.s || 'General') === s);
-                let desc = subTxs.slice(0, 3).map(tx => tx.desc ? `• ${tx.desc}` : '').filter(d => d).join('<br>'); // Simplified
-                div.innerHTML = `<div style="flex:1;"><div>${s}</div><div style="font-size:0.8rem;color:#888;margin-top:5px;">${desc}</div></div><div class="row-right">$${a.toLocaleString()}</div>`;
+                const subTxs = txs.filter(t => normalizeSub(t.s || 'General') === s);
+                let desc = subTxs.slice(0, 3).map(tx => tx.desc ? `• ${esc(tx.desc)}` : '').filter(d => d).join('<br>');
+                div.innerHTML = `<div style="flex:1;"><div>${esc(s)}</div><div style="font-size:0.8rem;color:#5e5e5e;margin-top:5px;">${desc}</div></div><div class="row-right">$${a.toLocaleString()}</div>`;
                 list.appendChild(div);
             });
             if (sChart) sChart.destroy();
             sChart = new Chart(document.getElementById('subChart'), {
-                type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => `hsl(${Math.random() * 360},70%,70%)`), borderWidth: 0 }] },
+                type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
                 options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
             });
         }
@@ -1650,7 +1721,7 @@
 
             if (matched.length === 0) {
                 const empty = document.createElement('div');
-                empty.style.cssText = 'text-align:center; color:#888; padding:30px; font-size:0.9rem;';
+                empty.style.cssText = 'text-align:center; color:#5e5e5e; padding:30px; font-size:0.9rem;';
                 empty.textContent = 'Sin resultados. Probá con otra palabra.';
                 results.appendChild(empty);
                 return;
@@ -1670,7 +1741,7 @@
                 title.style.cssText = 'font-size:0.9rem; font-weight:600;';
                 title.textContent = (normalizeCat(t.c) || '?') + (t.s ? ' · ' + t.s : '');
                 const sub = document.createElement('div');
-                sub.style.cssText = 'font-size:0.75rem; color:#888;';
+                sub.style.cssText = 'font-size:0.75rem; color:#5e5e5e;';
                 sub.textContent = t.d + (t.desc ? ' — ' + t.desc : '');
                 left.append(title, sub);
 
@@ -1686,7 +1757,7 @@
 
             if (matched.length > 100) {
                 const more = document.createElement('div');
-                more.style.cssText = 'text-align:center; color:#888; padding:10px; font-size:0.8rem;';
+                more.style.cssText = 'text-align:center; color:#5e5e5e; padding:10px; font-size:0.8rem;';
                 more.textContent = `+${matched.length - 100} resultados más. Refiná tu búsqueda.`;
                 results.appendChild(more);
             }
@@ -1740,7 +1811,7 @@
                 row.appendChild(header);
 
                 const subsEl = document.createElement('div');
-                subsEl.style.cssText = 'font-size:0.8rem; color:#888; margin-top:8px;';
+                subsEl.style.cssText = 'font-size:0.8rem; color:#5e5e5e; margin-top:8px;';
                 subsEl.textContent = subs.length ? subs.join(' · ') : '(sin subcategorías)';
                 row.appendChild(subsEl);
 
@@ -1771,7 +1842,7 @@
             const keys = Object.keys(ALIASES);
             if (keys.length === 0) {
                 const empty = document.createElement('div');
-                empty.style.cssText = 'color:#aaa; font-size:0.85rem; text-align:center; padding:10px;';
+                empty.style.cssText = 'color:#6b6b6b; font-size:0.85rem; text-align:center; padding:10px;';
                 empty.textContent = 'Sin alias configurados';
                 list.appendChild(empty);
                 return;
@@ -1783,7 +1854,7 @@
                 left.className = 'row-left';
                 left.style.fontSize = '0.9rem';
                 const oldSpan = document.createElement('span');
-                oldSpan.style.cssText = 'text-decoration:line-through; color:#aaa;';
+                oldSpan.style.cssText = 'text-decoration:line-through; color:#6b6b6b;';
                 oldSpan.textContent = oldName;
                 const arrow = document.createElement('span');
                 arrow.style.margin = '0 8px';
