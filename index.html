@@ -491,7 +491,7 @@
                 <button class="neu-btn icon-btn" onclick="openHogar()" aria-label="Ver Hogar">
                     <span aria-hidden="true">🏠</span>
                 </button>
-                <button class="neu-btn icon-btn" onclick="openMarDePan()" aria-label="Ver Mar de Pan">
+                <button id="bizNavBtn" class="neu-btn icon-btn" onclick="openMarDePan()" aria-label="Ver Mar de Pan">
                     <span aria-hidden="true">🥖</span>
                 </button>
                 <button class="neu-btn icon-btn" onclick="openTrends()" aria-label="Ver Evolución">
@@ -540,7 +540,7 @@
             <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
                 onclick="renderHistory('hogar')">Hogar</button>
             <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
-                onclick="renderHistory('mdp')">Mar de Pan</button>
+                onclick="renderHistory('mdp')" id="bizFilterBtn">Mar de Pan</button>
         </div>
         <label for="histSearch" class="visually-hidden">Buscar transacciones</label>
         <input type="text" id="histSearch" class="neu-input" placeholder="🔍 Buscar: Amadeo, Nafta, Sueldos..."
@@ -594,16 +594,16 @@
     <div id="marDePanView" class="app-view">
         <div class="header">
             <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
-            <div class="app-title">Mar de Pan</div>
+            <div class="app-title" id="bizViewTitle">Mar de Pan</div>
         </div>
 
         <div class="summary-card neu-flat">
             <div class="stat-item">
-                <span class="stat-label">Ingresos MP</span>
+                <span class="stat-label" id="bizIncLabel">Ingresos MP</span>
                 <span id="mdpInc" class="stat-val income">$0</span>
             </div>
             <div class="stat-item">
-                <span class="stat-label">Egresos MP</span>
+                <span class="stat-label" id="bizExpLabel">Egresos MP</span>
                 <span id="mdpExp" class="stat-val expense">$0</span>
             </div>
             <div class="stat-item">
@@ -712,7 +712,7 @@
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addCategory('Ingreso')">+ Agregar categoría de ingreso</button>
 
         <h3 style="color:#555; margin-bottom:10px;">🔄 Alias (agrupamiento histórico)</h3>
-        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "MarDePan" → "Mar de Pan".</div>
+        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "Alimentacion" → "Alimentación".</div>
         <div id="cfgAliasList" class="list-container" style="padding-bottom:10px;"></div>
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addAlias()">+ Agregar alias</button>
 
@@ -790,8 +790,16 @@
         const API_URL = localStorage.getItem('FINANZAS_API_URL') || '';
         const IS_DEMO = !API_URL;
 
-        // SCHEMA por defecto (fallback). El SCHEMA real se carga desde localStorage/sheet
-        const SCHEMA_DEFAULT = {
+        // Anonimización del modo demo: el negocio aparece como "Emprendimiento"
+        // (con su ícono y abreviatura genéricos). En modo real (Martín/Lau)
+        // se usan los nombres originales para no romper el hábito.
+        const BIZ_NAME = IS_DEMO ? 'Emprendimiento' : 'Mar de Pan';
+        const BIZ_ICON = IS_DEMO ? '💼' : '🥖';
+        const BIZ_SHORT = IS_DEMO ? 'EMP' : 'MP';
+
+        // SCHEMA por defecto para modo real (Martín/Lau). El SCHEMA efectivo se
+        // carga desde localStorage/sheet si existe; si no, se usa este.
+        const SCHEMA_PERSONAL = {
             Egreso: {
                 'Alimentación': ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
                 'HogarYVida': ['Familia', 'Regalos', 'Varios', 'Salud', 'Actividades', 'Salidas', 'Indumentaria', 'Mascota', 'Servicios', 'Mantenimiento', 'Infraestructura'],
@@ -805,6 +813,23 @@
             }
         };
 
+        // SCHEMA anónimo para modo demo (portafolio público)
+        const SCHEMA_DEMO = {
+            Egreso: {
+                'Alimentación': ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
+                'Hogar': ['Servicios', 'Salud', 'Salidas', 'Indumentaria', 'Mantenimiento', 'Regalos', 'Varios'],
+                'Emprendimiento': ['Sueldos', 'Alquiler', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento'],
+                'Movilidad': ['Seguro', 'Peajes', 'Nafta', 'Mecánica', 'Transporte'],
+                'Proyectos': [],
+            },
+            Ingreso: {
+                'Emprendimiento': ['Facturación', 'Otros'],
+                'Hogar': ['Sueldo', 'Freelance', 'Changas', 'Devoluciones', 'Otros']
+            }
+        };
+
+        const SCHEMA_DEFAULT = IS_DEMO ? SCHEMA_DEMO : SCHEMA_PERSONAL;
+
         // Alias por defecto para agrupar variantes históricas
         // NOTA: los alias aplican a nombres de CATEGORÍA, no de subcategoría.
         // Para unificar subcategorías (como "Sueldo"→"Sueldos") la lógica de agrupamiento
@@ -814,9 +839,16 @@
             'Alimentacion': 'Alimentación'
         };
 
-        // Carga el schema y aliases (localStorage si existen, default si no)
-        let SCHEMA = JSON.parse(localStorage.getItem('FINANZAS_SCHEMA')) || JSON.parse(JSON.stringify(SCHEMA_DEFAULT));
-        let ALIASES = JSON.parse(localStorage.getItem('FINANZAS_ALIASES')) || {...ALIASES_DEFAULT};
+        // Carga el schema y aliases.
+        // - En modo demo, SIEMPRE uso el schema anónimo (ignoro cache para
+        //   que visitantes viejos no vean datos personales residuales).
+        // - En modo real, priorizo el cache del usuario y caigo al default personal.
+        let SCHEMA = IS_DEMO
+            ? JSON.parse(JSON.stringify(SCHEMA_DEFAULT))
+            : (JSON.parse(localStorage.getItem('FINANZAS_SCHEMA')) || JSON.parse(JSON.stringify(SCHEMA_DEFAULT)));
+        let ALIASES = IS_DEMO
+            ? {...ALIASES_DEFAULT}
+            : (JSON.parse(localStorage.getItem('FINANZAS_ALIASES')) || {...ALIASES_DEFAULT});
         const QUOTES = [
             "El orden es la base de la abundancia.",
             "El único bunker es la organización.",
@@ -830,38 +862,38 @@
             "Este gesto alimenta la visión"
         ];
 
-        // Datos de ejemplo para modo demo (portafolio)
+        // Datos de ejemplo para modo demo (portafolio) — totalmente anónimos
         const DEMO_DATA = [
             // Febrero 2026
-            { d:'2026-02-03', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:185000, desc:'Ventas semana 1' },
-            { d:'2026-02-10', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:210000, desc:'Ventas semana 2' },
+            { d:'2026-02-03', t:'Ingreso', c:'Emprendimiento', s:'Facturación', a:185000, desc:'Ventas semana 1' },
+            { d:'2026-02-10', t:'Ingreso', c:'Emprendimiento', s:'Facturación', a:210000, desc:'Ventas semana 2' },
             { d:'2026-02-05', t:'Ingreso', c:'Hogar', s:'Sueldo', a:420000, desc:'Sueldo febrero' },
-            { d:'2026-02-07', t:'Egreso', c:'Mar de Pan', s:'Insumos', a:95000, desc:'Harina y levadura' },
-            { d:'2026-02-08', t:'Egreso', c:'Mar de Pan', s:'Sueldos', a:150000, desc:'Ayudante' },
-            { d:'2026-02-12', t:'Egreso', c:'Alimentacion', s:'Supermercado', a:78000, desc:'Compra semanal' },
-            { d:'2026-02-15', t:'Egreso', c:'HogarYVida', s:'Servicios', a:45000, desc:'Luz + gas' },
+            { d:'2026-02-07', t:'Egreso', c:'Emprendimiento', s:'Insumos', a:95000, desc:'Materia prima' },
+            { d:'2026-02-08', t:'Egreso', c:'Emprendimiento', s:'Sueldos', a:150000, desc:'Personal' },
+            { d:'2026-02-12', t:'Egreso', c:'Alimentación', s:'Supermercado', a:78000, desc:'Compra semanal' },
+            { d:'2026-02-15', t:'Egreso', c:'Hogar', s:'Servicios', a:45000, desc:'Luz + gas' },
             { d:'2026-02-20', t:'Egreso', c:'Movilidad', s:'Nafta', a:32000, desc:'Carga completa' },
             // Marzo 2026
-            { d:'2026-03-03', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:195000, desc:'Ventas semana 1' },
-            { d:'2026-03-10', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:230000, desc:'Ventas semana 2' },
-            { d:'2026-03-17', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:205000, desc:'Ventas semana 3' },
+            { d:'2026-03-03', t:'Ingreso', c:'Emprendimiento', s:'Facturación', a:195000, desc:'Ventas semana 1' },
+            { d:'2026-03-10', t:'Ingreso', c:'Emprendimiento', s:'Facturación', a:230000, desc:'Ventas semana 2' },
+            { d:'2026-03-17', t:'Ingreso', c:'Emprendimiento', s:'Facturación', a:205000, desc:'Ventas semana 3' },
             { d:'2026-03-05', t:'Ingreso', c:'Hogar', s:'Sueldo', a:420000, desc:'Sueldo marzo' },
-            { d:'2026-03-15', t:'Ingreso', c:'Hogar', s:'Freelance', a:85000, desc:'Diseño web' },
-            { d:'2026-03-06', t:'Egreso', c:'Mar de Pan', s:'Insumos', a:102000, desc:'Harina, semillas, manteca' },
-            { d:'2026-03-08', t:'Egreso', c:'Mar de Pan', s:'Sueldos', a:150000, desc:'Ayudante' },
-            { d:'2026-03-10', t:'Egreso', c:'Mar de Pan', s:'Servicios', a:18000, desc:'Gas local' },
-            { d:'2026-03-12', t:'Egreso', c:'Alimentacion', s:'Supermercado', a:82000, desc:'Compra semanal' },
-            { d:'2026-03-14', t:'Egreso', c:'Alimentacion', s:'Verdulería', a:15000, desc:'Frutas y verduras' },
-            { d:'2026-03-18', t:'Egreso', c:'HogarYVida', s:'Servicios', a:48000, desc:'Luz + gas + agua' },
+            { d:'2026-03-15', t:'Ingreso', c:'Hogar', s:'Freelance', a:85000, desc:'Proyecto puntual' },
+            { d:'2026-03-06', t:'Egreso', c:'Emprendimiento', s:'Insumos', a:102000, desc:'Materia prima' },
+            { d:'2026-03-08', t:'Egreso', c:'Emprendimiento', s:'Sueldos', a:150000, desc:'Personal' },
+            { d:'2026-03-10', t:'Egreso', c:'Emprendimiento', s:'Servicios', a:18000, desc:'Gas del local' },
+            { d:'2026-03-12', t:'Egreso', c:'Alimentación', s:'Supermercado', a:82000, desc:'Compra semanal' },
+            { d:'2026-03-14', t:'Egreso', c:'Alimentación', s:'Verdulería', a:15000, desc:'Frutas y verduras' },
+            { d:'2026-03-18', t:'Egreso', c:'Hogar', s:'Servicios', a:48000, desc:'Luz + gas + agua' },
             { d:'2026-03-22', t:'Egreso', c:'Movilidad', s:'Nafta', a:35000, desc:'Carga completa' },
-            { d:'2026-03-25', t:'Egreso', c:'Mar de Pan', s:'Inversiones', a:120000, desc:'Horno nuevo' },
+            { d:'2026-03-25', t:'Egreso', c:'Emprendimiento', s:'Inversiones', a:120000, desc:'Equipamiento' },
             // Abril 2026
-            { d:'2026-04-02', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:220000, desc:'Ventas semana 1' },
+            { d:'2026-04-02', t:'Ingreso', c:'Emprendimiento', s:'Facturación', a:220000, desc:'Ventas semana 1' },
             { d:'2026-04-05', t:'Ingreso', c:'Hogar', s:'Sueldo', a:440000, desc:'Sueldo abril' },
-            { d:'2026-04-07', t:'Egreso', c:'Mar de Pan', s:'Insumos', a:98000, desc:'Insumos semanales' },
-            { d:'2026-04-08', t:'Egreso', c:'Mar de Pan', s:'Sueldos', a:150000, desc:'Ayudante' },
-            { d:'2026-04-10', t:'Egreso', c:'Alimentacion', s:'Supermercado', a:85000, desc:'Compra semanal' },
-            { d:'2026-04-11', t:'Egreso', c:'Proyectos', s:'', a:45000, desc:'Hosting y dominio TRAMA' },
+            { d:'2026-04-07', t:'Egreso', c:'Emprendimiento', s:'Insumos', a:98000, desc:'Insumos semanales' },
+            { d:'2026-04-08', t:'Egreso', c:'Emprendimiento', s:'Sueldos', a:150000, desc:'Personal' },
+            { d:'2026-04-10', t:'Egreso', c:'Alimentación', s:'Supermercado', a:85000, desc:'Compra semanal' },
+            { d:'2026-04-11', t:'Egreso', c:'Proyectos', s:'', a:45000, desc:'Servicios digitales' },
         ];
 
         let TRANSACTIONS = IS_DEMO
@@ -916,12 +948,14 @@
         }
 
         /* --- HELPERS retrocompatibles con categorías históricas --- */
-        // Acepta los 3 esquemas que conviven en el spreadsheet:
-        // 1) Mar de Pan > Facturación (esquema actual)
-        // 2) Fuentes > Mar de Pan (esquema viejo)
-        // 3) Hogar > Panadería (esquema muy viejo)
+        // Acepta los esquemas que conviven:
+        // - BIZ_NAME dinámico (Mar de Pan en modo real, Emprendimiento en demo)
+        // - Mar de Pan > Facturación (esquema actual)
+        // - Fuentes > Mar de Pan (esquema viejo)
+        // - Hogar > Panadería (esquema muy viejo)
         function isMdpIncome(t) {
             if (t.t !== 'Ingreso') return false;
+            if (t.c === BIZ_NAME) return true;
             if (t.c === 'Mar de Pan' || t.c === 'MarDePan') return true;
             if (t.c === 'Fuentes' && t.s === 'Mar de Pan') return true;
             if (t.c === 'Hogar' && t.s === 'Panadería') return true;
@@ -929,7 +963,7 @@
         }
         function isMdpExpense(t) {
             if (t.t !== 'Egreso') return false;
-            return t.c === 'Mar de Pan' || t.c === 'MarDePan';
+            return t.c === BIZ_NAME || t.c === 'Mar de Pan' || t.c === 'MarDePan';
         }
         function isMdpTx(t) { return isMdpIncome(t) || isMdpExpense(t); }
         // Normaliza una categoría aplicando los alias configurados
@@ -1237,12 +1271,41 @@
             }
         });
 
+        // Aplica labels anónimos al DOM cuando estamos en modo demo.
+        // Los usuarios reales (con API_URL configurada) no disparan esta función.
+        function applyDemoLabels() {
+            // Botón de navegación al negocio (top-bar)
+            const navBtn = document.getElementById('bizNavBtn');
+            if (navBtn) {
+                navBtn.setAttribute('aria-label', 'Ver Emprendimiento');
+                const span = navBtn.querySelector('span');
+                if (span) span.textContent = BIZ_ICON;
+            }
+            // Título de la vista del negocio
+            const viewTitle = document.getElementById('bizViewTitle');
+            if (viewTitle) viewTitle.textContent = BIZ_NAME;
+            // Labels de ingresos/egresos del negocio
+            const incLabel = document.getElementById('bizIncLabel');
+            if (incLabel) incLabel.textContent = `Ingresos ${BIZ_SHORT}`;
+            const expLabel = document.getElementById('bizExpLabel');
+            if (expLabel) expLabel.textContent = `Egresos ${BIZ_SHORT}`;
+            // Botón de filtro en Historial
+            const filterBtn = document.getElementById('bizFilterBtn');
+            if (filterBtn) filterBtn.textContent = BIZ_NAME;
+            // Placeholder del buscador con ejemplos anónimos
+            const search = document.getElementById('histSearch');
+            if (search) search.placeholder = '🔍 Buscar: alimentos, nafta, servicios...';
+            // Título del documento
+            document.title = 'Finanzas Personales — Demo';
+        }
+
         // Cargar datos en el fondo ni bien abre la app
         window.addEventListener('DOMContentLoaded', () => {
             if (IS_DEMO) {
                 document.getElementById('demoBadge').style.display = 'block';
                 document.getElementById('syncBtn').style.opacity = '0.3';
                 document.getElementById('syncBtn').style.pointerEvents = 'none';
+                applyDemoLabels();
             }
             fetchData();
         });
