@@ -25,7 +25,6 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            user-select: none;
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -89,6 +88,7 @@
             cursor: pointer;
             border: none;
             transition: transform 0.1s ease;
+            user-select: none;
         }
 
         .neu-btn:active {
@@ -184,6 +184,7 @@
             box-shadow: 6px 6px 10px var(--shadow-dark), -6px -6px 10px var(--shadow-light);
             border: none;
             cursor: pointer;
+            user-select: none;
         }
 
         .btn-ingreso {
@@ -416,6 +417,21 @@
             color: var(--primary);
             width: 90%;
         }
+        .demo-badge {
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(77, 124, 255, 0.15);
+            color: var(--primary);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            z-index: 300;
+            pointer-events: none;
+            letter-spacing: 0.5px;
+        }
     </style>
 </head>
 
@@ -426,14 +442,18 @@
         <div class="spinner"></div>
     </div>
     <div id="toast" class="toast"></div>
+    <div id="demoBadge" class="demo-badge" style="display:none;">DEMO — datos ficticios</div>
     <audio id="sfx-success" src="https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3"></audio>
 
     <!-- 1. HOME VIEW -->
     <div id="homeView" class="app-view active">
         <div class="display-area">
             <div class="top-bar">
-                <button class="neu-btn icon-btn" onclick="forceRefresh()" title="Sincronizar">
+                <button id="syncBtn" class="neu-btn icon-btn" onclick="forceRefresh()" title="Sincronizar">
                     🔄
+                </button>
+                <button class="neu-btn icon-btn" onclick="openConfig()" title="Configuración">
+                    ⚙️
                 </button>
                 <button class="neu-btn icon-btn" onclick="openHogar()" title="Hogar">
                     🏠
@@ -489,17 +509,22 @@
             <button class="neu-flat" style="flex:1; padding:8px; border-radius:10px; cursor:pointer;"
                 onclick="renderHistory('mdp')">Mar de Pan</button>
         </div>
-        <div class="summary-card neu-flat">
-            <div class="stat-item"><span class="stat-label">Total Ingresos</span><span id="globInc"
-                    class="stat-val income">$0</span></div>
-            <div class="stat-item"><span class="stat-label">Total Egresos</span><span id="globExp"
-                    class="stat-val expense">$0</span></div>
-            <div class="stat-item" style="grid-column: span 2"><span class="stat-label">Balance Total</span><span
-                    id="globBal" class="stat-val balance">$0</span></div>
+        <input type="text" id="histSearch" class="neu-input" placeholder="🔍 Buscar: Amadeo, Nafta, Sueldos..."
+            style="margin-bottom:15px;" spellcheck="false" autocomplete="off" oninput="runSearch()">
+        <div id="searchResults" style="display:none;"></div>
+        <div id="historyContent">
+            <div class="summary-card neu-flat">
+                <div class="stat-item"><span class="stat-label">Total Ingresos</span><span id="globInc"
+                        class="stat-val income">$0</span></div>
+                <div class="stat-item"><span class="stat-label">Total Egresos</span><span id="globExp"
+                        class="stat-val expense">$0</span></div>
+                <div class="stat-item" style="grid-column: span 2"><span class="stat-label">Balance Total</span><span
+                        id="globBal" class="stat-val balance">$0</span></div>
+            </div>
+            <div class="chart-card neu-flat"><canvas id="historyChart"></canvas></div>
+            <h3 style="margin:20px 0 10px 0; color:#888; font-size:1rem;">MESES</h3>
+            <div id="monthList" class="list-container"></div>
         </div>
-        <div class="chart-card neu-flat"><canvas id="historyChart"></canvas></div>
-        <h3 style="margin:20px 0 10px 0; color:#888; font-size:1rem;">MESES</h3>
-        <div id="monthList" class="list-container"></div>
     </div>
 
     <!-- 3. TRENDS VIEW (New) -->
@@ -630,6 +655,39 @@
     </div>
 
 
+    <!-- 4.2 CONFIG VIEW (New) -->
+    <div id="configView" class="app-view">
+        <div class="header">
+            <button class="neu-btn back-btn" onclick="goBack()">⬅</button>
+            <div class="app-title">Configuración</div>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">🔗 Conexión</h3>
+        <div class="neu-flat" style="padding:15px; margin-bottom:20px;">
+            <div style="font-size:0.8rem; color:#888; margin-bottom:5px;">API URL (Google Apps Script)</div>
+            <div id="cfgApiUrlDisplay" style="font-size:0.85rem; word-break:break-all; color:#555; margin-bottom:10px;">(no configurada)</div>
+            <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="configureApi()">Cambiar URL</button>
+        </div>
+
+        <h3 style="color:#555; margin-bottom:10px;">📤 Categorías de Egreso</h3>
+        <div id="cfgEgresoList" class="list-container" style="padding-bottom:10px;"></div>
+        <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addCategory('Egreso')">+ Agregar categoría de egreso</button>
+
+        <h3 style="color:#555; margin-bottom:10px;">📥 Categorías de Ingreso</h3>
+        <div id="cfgIngresoList" class="list-container" style="padding-bottom:10px;"></div>
+        <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addCategory('Ingreso')">+ Agregar categoría de ingreso</button>
+
+        <h3 style="color:#555; margin-bottom:10px;">🔄 Alias (agrupamiento histórico)</h3>
+        <div style="font-size:0.8rem; color:#888; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "MarDePan" → "Mar de Pan".</div>
+        <div id="cfgAliasList" class="list-container" style="padding-bottom:10px;"></div>
+        <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addAlias()">+ Agregar alias</button>
+
+        <div style="display:flex; gap:10px; margin-bottom:30px;">
+            <button class="big-btn btn-primary" style="flex:1;" onclick="saveConfig()">💾 Guardar y sincronizar</button>
+            <button class="neu-flat" style="flex:0.5; padding:15px; border-radius:20px; cursor:pointer;" onclick="restoreDefaults()">Restaurar</button>
+        </div>
+    </div>
+
     <!-- 5. MONTH/BREAKDOWN/SUB VIEWS (Existing Drilldown) -->
     <div id="monthView" class="app-view">
         <div class="header"><button class="neu-btn back-btn" onclick="goBack()">⬅</button>
@@ -693,21 +751,35 @@
     <script>
         // --- MODO DEMO (portafolio) ---
         // Para uso personal: editá API_URL y SCHEMA con tus datos reales
-        const API_URL = '';
+        // API_URL: si hay una guardada en localStorage la usa (uso personal);
+        // si no, queda vacía (modo demo para portafolio en GitHub Pages)
+        const API_URL = localStorage.getItem('FINANZAS_API_URL') || '';
+        const IS_DEMO = !API_URL;
 
-        const SCHEMA = {
+        // SCHEMA por defecto (fallback). El SCHEMA real se carga desde localStorage/sheet
+        const SCHEMA_DEFAULT = {
             Egreso: {
-                Alimentacion: ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
-                HogarYVida: ['Familia', 'Regalos', 'Varios', 'Salud', 'Actividades', 'Salidas', 'Indumentaria', 'Mascota', 'Servicios', 'Mantenimiento', 'Infraestructura'],
-                MarDePan: ['Sueldos', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento', 'Extracción'],
-                Movilidad: ['Seguro', 'Peajes', 'Nafta', 'Mecánica', 'Transporte'],
-                Proyectos: ['Proyecto A', 'Proyecto B', 'Proyecto C', 'MVP', 'Inversión'],
+                'Alimentación': ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
+                'HogarYVida': ['Familia', 'Regalos', 'Varios', 'Salud', 'Actividades', 'Salidas', 'Indumentaria', 'Mascota', 'Servicios', 'Mantenimiento', 'Infraestructura'],
+                'Mar de Pan': ['Sueldos', 'Sueldo', 'Alquiler', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento', 'Extracción'],
+                'Movilidad': ['Seguro', 'Peajes', 'Nafta', 'Mecánica', 'Transporte'],
+                'Proyectos': [],
             },
             Ingreso: {
                 'Mar de Pan': ['Facturación', 'Otros'],
-                'Hogar': ['Fuente 1', 'Fuente 2', 'Fuente 3', 'Fuente 4', 'Changas', 'Otros']
+                'Hogar': ['Sueldo', 'Freelance', 'Changas', 'Devoluciones', 'Otros']
             }
         };
+
+        // Alias por defecto para agrupar variantes históricas
+        const ALIASES_DEFAULT = {
+            'MarDePan': 'Mar de Pan',
+            'Alimentacion': 'Alimentación'
+        };
+
+        // Carga el schema y aliases (localStorage si existen, default si no)
+        let SCHEMA = JSON.parse(localStorage.getItem('FINANZAS_SCHEMA')) || JSON.parse(JSON.stringify(SCHEMA_DEFAULT));
+        let ALIASES = JSON.parse(localStorage.getItem('FINANZAS_ALIASES')) || {...ALIASES_DEFAULT};
         const QUOTES = [
             "El orden es la base de la abundancia.",
             "El único bunker es la organización.",
@@ -721,7 +793,43 @@
             "Este gesto alimenta la visión"
         ];
 
-        let TRANSACTIONS = JSON.parse(localStorage.getItem('FINANZAS_CACHE')) || [];
+        // Datos de ejemplo para modo demo (portafolio)
+        const DEMO_DATA = [
+            // Febrero 2026
+            { d:'2026-02-03', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:185000, desc:'Ventas semana 1' },
+            { d:'2026-02-10', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:210000, desc:'Ventas semana 2' },
+            { d:'2026-02-05', t:'Ingreso', c:'Hogar', s:'Sueldo', a:420000, desc:'Sueldo febrero' },
+            { d:'2026-02-07', t:'Egreso', c:'Mar de Pan', s:'Insumos', a:95000, desc:'Harina y levadura' },
+            { d:'2026-02-08', t:'Egreso', c:'Mar de Pan', s:'Sueldos', a:150000, desc:'Ayudante' },
+            { d:'2026-02-12', t:'Egreso', c:'Alimentacion', s:'Supermercado', a:78000, desc:'Compra semanal' },
+            { d:'2026-02-15', t:'Egreso', c:'HogarYVida', s:'Servicios', a:45000, desc:'Luz + gas' },
+            { d:'2026-02-20', t:'Egreso', c:'Movilidad', s:'Nafta', a:32000, desc:'Carga completa' },
+            // Marzo 2026
+            { d:'2026-03-03', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:195000, desc:'Ventas semana 1' },
+            { d:'2026-03-10', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:230000, desc:'Ventas semana 2' },
+            { d:'2026-03-17', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:205000, desc:'Ventas semana 3' },
+            { d:'2026-03-05', t:'Ingreso', c:'Hogar', s:'Sueldo', a:420000, desc:'Sueldo marzo' },
+            { d:'2026-03-15', t:'Ingreso', c:'Hogar', s:'Freelance', a:85000, desc:'Diseño web' },
+            { d:'2026-03-06', t:'Egreso', c:'Mar de Pan', s:'Insumos', a:102000, desc:'Harina, semillas, manteca' },
+            { d:'2026-03-08', t:'Egreso', c:'Mar de Pan', s:'Sueldos', a:150000, desc:'Ayudante' },
+            { d:'2026-03-10', t:'Egreso', c:'Mar de Pan', s:'Servicios', a:18000, desc:'Gas local' },
+            { d:'2026-03-12', t:'Egreso', c:'Alimentacion', s:'Supermercado', a:82000, desc:'Compra semanal' },
+            { d:'2026-03-14', t:'Egreso', c:'Alimentacion', s:'Verdulería', a:15000, desc:'Frutas y verduras' },
+            { d:'2026-03-18', t:'Egreso', c:'HogarYVida', s:'Servicios', a:48000, desc:'Luz + gas + agua' },
+            { d:'2026-03-22', t:'Egreso', c:'Movilidad', s:'Nafta', a:35000, desc:'Carga completa' },
+            { d:'2026-03-25', t:'Egreso', c:'Mar de Pan', s:'Inversiones', a:120000, desc:'Horno nuevo' },
+            // Abril 2026
+            { d:'2026-04-02', t:'Ingreso', c:'Mar de Pan', s:'Facturación', a:220000, desc:'Ventas semana 1' },
+            { d:'2026-04-05', t:'Ingreso', c:'Hogar', s:'Sueldo', a:440000, desc:'Sueldo abril' },
+            { d:'2026-04-07', t:'Egreso', c:'Mar de Pan', s:'Insumos', a:98000, desc:'Insumos semanales' },
+            { d:'2026-04-08', t:'Egreso', c:'Mar de Pan', s:'Sueldos', a:150000, desc:'Ayudante' },
+            { d:'2026-04-10', t:'Egreso', c:'Alimentacion', s:'Supermercado', a:85000, desc:'Compra semanal' },
+            { d:'2026-04-11', t:'Egreso', c:'Proyectos', s:'', a:45000, desc:'Hosting y dominio TRAMA' },
+        ];
+
+        let TRANSACTIONS = IS_DEMO
+            ? [...DEMO_DATA]
+            : (JSON.parse(localStorage.getItem('FINANZAS_CACHE')) || []);
         let HISTORY_MAP = {};
         let currentTx = { type: '', category: '', subcategory: '', amount: 0, desc: '' };
 
@@ -759,6 +867,7 @@
             if (viewId === 'trendsView') renderTrends();
             if (viewId === 'marDePanView') renderMarDePan();
             if (viewId === 'hogarView') renderHogar();
+            if (viewId === 'configView') renderConfig();
         }
 
         function goBack() {
@@ -767,6 +876,28 @@
             document.querySelector('.app-view.active').classList.remove('active');
             document.getElementById(prev.id).classList.add('active');
             window.currentContext = prev.context;
+        }
+
+        /* --- HELPERS retrocompatibles con categorías históricas --- */
+        // Acepta los 3 esquemas que conviven en el spreadsheet:
+        // 1) Mar de Pan > Facturación (esquema actual)
+        // 2) Fuentes > Mar de Pan (esquema viejo)
+        // 3) Hogar > Panadería (esquema muy viejo)
+        function isMdpIncome(t) {
+            if (t.t !== 'Ingreso') return false;
+            if (t.c === 'Mar de Pan' || t.c === 'MarDePan') return true;
+            if (t.c === 'Fuentes' && t.s === 'Mar de Pan') return true;
+            if (t.c === 'Hogar' && t.s === 'Panadería') return true;
+            return false;
+        }
+        function isMdpExpense(t) {
+            if (t.t !== 'Egreso') return false;
+            return t.c === 'Mar de Pan' || t.c === 'MarDePan';
+        }
+        function isMdpTx(t) { return isMdpIncome(t) || isMdpExpense(t); }
+        // Normaliza una categoría aplicando los alias configurados
+        function normalizeCat(c) {
+            return ALIASES[c] || c;
         }
 
         /* --- BASIC LOGIC (Input, Modal, TX) --- */
@@ -820,33 +951,74 @@
             document.getElementById('confirmView').classList.remove('active');
             document.getElementById('homeView').classList.add('active');
         }
-        async function submitFinal() {
+        function submitFinal() {
             currentTx.desc = document.getElementById('descInput').value;
             document.getElementById('confirmView').classList.remove('active');
             document.getElementById('homeView').classList.add('active');
 
-            showLoader();
-            try {
-                // Modo demo: guardar solo en localStorage
-                if (!API_URL) {
-                    TRANSACTIONS.push({ d: new Date().toISOString().slice(0,10), t: currentTx.type, c: currentTx.category, s: currentTx.subcategory, a: currentTx.amount, desc: currentTx.desc });
-                    localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
-                    processHistory();
-                    inputVal = ""; document.getElementById('displayAmount').innerText = "0";
-                    successEffects();
-                    hideLoader();
-                    return;
-                }
+            // Optimistic update: agregar al array local inmediatamente
+            const newTx = {
+                d: new Date().toISOString().slice(0, 10),
+                t: currentTx.type,
+                c: currentTx.category,
+                s: currentTx.subcategory,
+                a: currentTx.amount,
+                desc: currentTx.desc
+            };
+            TRANSACTIONS.push(newTx);
+            if (!IS_DEMO) localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
+            processHistory();
+            inputVal = ""; document.getElementById('displayAmount').innerText = "0";
+            successEffects();
 
+            // Sync en background (no bloquea UI)
+            if (API_URL) {
+                syncTransaction(newTx);
+            }
+        }
+
+        // Cola de transacciones pendientes de sincronizar
+        let PENDING_SYNC = 0;
+        function updatePendingIndicator() {
+            const syncBtn = document.getElementById('syncBtn');
+            if (!syncBtn) return;
+            if (PENDING_SYNC > 0) {
+                syncBtn.innerText = `⏳${PENDING_SYNC}`;
+                syncBtn.style.color = 'var(--warning)';
+            } else {
+                syncBtn.innerText = '🔄';
+                syncBtn.style.color = '';
+            }
+        }
+
+        async function syncTransaction(tx) {
+            PENDING_SYNC++;
+            updatePendingIndicator();
+            try {
                 await fetch(API_URL, {
                     method: 'POST', mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'addTransaction', date: new Date().toISOString(), type: currentTx.type, category: currentTx.category, subcategory: currentTx.subcategory, amount: currentTx.amount, description: currentTx.desc })
+                    body: JSON.stringify({
+                        action: 'addTransaction',
+                        date: new Date().toISOString(),
+                        type: tx.t,
+                        category: tx.c,
+                        subcategory: tx.s,
+                        amount: tx.a,
+                        description: tx.desc
+                    })
                 });
-                inputVal = ""; document.getElementById('displayAmount').innerText = "0";
-                successEffects(); await fetchData(true);
-            } catch (e) { alert("Error de conexión"); }
-            hideLoader();
+            } catch (e) {
+                console.error('Sync error:', e);
+                const t = document.getElementById('toast');
+                t.innerText = '⚠️ Error al sincronizar';
+                t.style.color = 'var(--secondary)';
+                t.style.display = 'block';
+                setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 3500);
+            } finally {
+                PENDING_SYNC--;
+                updatePendingIndicator();
+            }
         }
 
         /* --- DATA & FETCH --- */
@@ -861,16 +1033,71 @@
             hideLoader();
         }
 
+        // Marker para distinguir filas de configuración de transacciones reales
+        const CONFIG_MARKER = '__CONFIG__';
+
+        // Extrae filas de config del raw, aplica la más reciente y devuelve las transacciones limpias
+        function extractConfig(raw) {
+            const txs = [];
+            const configs = { schema: null, aliases: null };
+            raw.forEach(r => {
+                if (r && r.t === CONFIG_MARKER) {
+                    try {
+                        const payload = JSON.parse(atob(r.desc || ''));
+                        if (r.c === 'schema') configs.schema = { data: payload, date: r.d };
+                        if (r.c === 'aliases') configs.aliases = { data: payload, date: r.d };
+                    } catch (e) { console.warn('Config row corrupta:', r); }
+                } else if (r && r.d && r.t) {
+                    txs.push(r);
+                }
+            });
+            if (configs.schema) {
+                SCHEMA = configs.schema.data;
+                localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
+            }
+            if (configs.aliases) {
+                ALIASES = configs.aliases.data;
+                localStorage.setItem('FINANZAS_ALIASES', JSON.stringify(ALIASES));
+            }
+            return txs;
+        }
+
+        // Guarda una config (schema o aliases) como fila especial en el sheet
+        async function saveConfigToSheet(kind, data) {
+            if (!API_URL) {
+                // En modo local, solo localStorage
+                localStorage.setItem(kind === 'schema' ? 'FINANZAS_SCHEMA' : 'FINANZAS_ALIASES', JSON.stringify(data));
+                return;
+            }
+            const encoded = btoa(JSON.stringify(data));
+            await fetch(API_URL, {
+                method: 'POST', mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'addTransaction',
+                    date: new Date().toISOString(),
+                    type: CONFIG_MARKER,
+                    category: kind, // 'schema' o 'aliases'
+                    subcategory: '',
+                    amount: 0,
+                    description: encoded
+                })
+            });
+            localStorage.setItem(kind === 'schema' ? 'FINANZAS_SCHEMA' : 'FINANZAS_ALIASES', JSON.stringify(data));
+        }
+
         async function fetchSync() {
             if (!API_URL) return;
             try {
                 const res = await fetch(`${API_URL}?action=getRawData`);
                 const raw = await res.json();
+                // Extraer configuración y separar transacciones reales
+                const cleanTxs = extractConfig(raw);
 
-                // Actualizar solo si hay cambios (comparando longitud o string)
-                if (JSON.stringify(TRANSACTIONS) !== JSON.stringify(raw)) {
-                    TRANSACTIONS = raw;
-                    localStorage.setItem('FINANZAS_CACHE', JSON.stringify(raw));
+                // Actualizar solo si hay cambios
+                if (JSON.stringify(TRANSACTIONS) !== JSON.stringify(cleanTxs)) {
+                    TRANSACTIONS = cleanTxs;
+                    localStorage.setItem('FINANZAS_CACHE', JSON.stringify(cleanTxs));
                     processHistory();
 
                     // Re-renderizar panel activo
@@ -885,6 +1112,25 @@
             } catch (e) { console.error(e); }
         }
 
+        function configureApi() {
+            const current = localStorage.getItem('FINANZAS_API_URL') || '';
+            const msg = current
+                ? `API_URL actual:\n${current}\n\nPegá una nueva URL o dejá vacío para volver al modo demo:`
+                : 'Pegá la URL de tu Google Apps Script (o dejá vacío para cancelar):';
+            const input = prompt(msg, current);
+            if (input === null) return; // canceló
+            if (input.trim() === '') {
+                localStorage.removeItem('FINANZAS_API_URL');
+                localStorage.removeItem('FINANZAS_CACHE');
+                alert('Modo demo activado. Recargando...');
+            } else {
+                localStorage.setItem('FINANZAS_API_URL', input.trim());
+                localStorage.removeItem('FINANZAS_CACHE');
+                alert('API_URL guardada. Recargando...');
+            }
+            location.reload();
+        }
+
         async function forceRefresh() {
             showLoader();
             await fetchSync();
@@ -894,8 +1140,41 @@
             t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
         }
 
+        // Soporte de teclado físico (numpad incluido) en la vista Home
+        document.addEventListener('keydown', (e) => {
+            // No interceptar si el foco está en un campo de texto
+            const tag = document.activeElement?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            // Solo actuar en la vista Home
+            if (!document.getElementById('homeView').classList.contains('active')) return;
+
+            const key = e.key;
+            if ((key >= '0' && key <= '9')) {
+                e.preventDefault(); pressNum(key);
+            } else if (key === '.' || key === ',') {
+                e.preventDefault(); pressNum('.');
+            } else if (key === 'Backspace') {
+                e.preventDefault(); pressNum('back');
+            } else if (key === 'Enter') {
+                e.preventDefault();
+                if (inputVal && parseFloat(inputVal) !== 0) startTx('Egreso');
+            } else if (key === '+') {
+                e.preventDefault();
+                if (inputVal && parseFloat(inputVal) !== 0) startTx('Ingreso');
+            } else if (key === 'Escape') {
+                e.preventDefault(); inputVal = ''; document.getElementById('displayAmount').innerText = '0';
+            }
+        });
+
         // Cargar datos en el fondo ni bien abre la app
-        window.addEventListener('DOMContentLoaded', () => { fetchData(); });
+        window.addEventListener('DOMContentLoaded', () => {
+            if (IS_DEMO) {
+                document.getElementById('demoBadge').style.display = 'block';
+                document.getElementById('syncBtn').style.opacity = '0.3';
+                document.getElementById('syncBtn').style.pointerEvents = 'none';
+            }
+            fetchData();
+        });
         function processHistory() {
             HISTORY_MAP = {};
             TRANSACTIONS.forEach(t => {
@@ -909,10 +1188,16 @@
         }
 
         /* --- VIEWS RENDERERS --- */
-        async function openHistory() { await fetchData(); navigate('historyView'); }
+        async function openHistory() {
+            await fetchData();
+            const search = document.getElementById('histSearch');
+            if (search) { search.value = ''; runSearch(); }
+            navigate('historyView');
+        }
         async function openTrends() { await fetchData(); navigate('trendsView'); }
         async function openMarDePan() { await fetchData(); navigate('marDePanView'); }
         async function openHogar() { await fetchData(); navigate('hogarView'); }
+        function openConfig() { navigate('configView'); renderConfig(); }
 
         // HISTORY
         let histChart = null;
@@ -928,9 +1213,7 @@
                 let fInc = 0, fExp = 0;
 
                 d.txs.forEach(t => {
-                    const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
-                    const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
-                    const isMdp = isMdpInc || isMdpExp;
+                    const isMdp = isMdpTx(t);
 
                     if (filterMode === 'total' || (filterMode === 'mdp' && isMdp) || (filterMode === 'hogar' && !isMdp)) {
                         if (t.t === 'Ingreso') fInc += t.a;
@@ -946,9 +1229,7 @@
                 let fInc = 0, fExp = 0;
 
                 d.txs.forEach(t => {
-                    const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
-                    const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
-                    const isMdp = isMdpInc || isMdpExp;
+                    const isMdp = isMdpTx(t);
 
                     if (filterMode === 'total' || (filterMode === 'mdp' && isMdp) || (filterMode === 'hogar' && !isMdp)) {
                         if (t.t === 'Ingreso') fInc += t.a;
@@ -1004,9 +1285,7 @@
 
                 let hInc = 0, hExp = 0;
                 d.txs.forEach(t => {
-                    const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
-                    const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
-                    if (!(isMdpInc || isMdpExp)) {
+                    if (!isMdpTx(t)) {
                         if (t.t === 'Ingreso') hInc += t.a;
                         else if (t.t === 'Egreso') hExp += t.a;
                     }
@@ -1082,9 +1361,7 @@
                 const mk = t.d.substring(0, 7);
                 if (!validMonthSet.has(mk)) return false;
 
-                const isInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
-                const isExp = t.t === 'Egreso' && t.c === 'MarDePan';
-                return isInc || isExp;
+                return isMdpTx(t);
             });
 
             // Totals
@@ -1190,9 +1467,7 @@
                 const mk = t.d.substring(0, 7);
                 if (!validMonthSet.has(mk)) return false;
 
-                const isMdpInc = t.t === 'Ingreso' && (t.c === 'Mar de Pan' || (t.c === 'Fuentes' && t.s === 'Mar de Pan'));
-                const isMdpExp = t.t === 'Egreso' && t.c === 'MarDePan';
-                return !(isMdpInc || isMdpExp);
+                return !isMdpTx(t);
             });
 
             // Totals
@@ -1210,8 +1485,8 @@
                 } else {
                     totExp += t.a;
                     flowByMonth[mk].exp += t.a;
-                    // Breakdown by Category
-                    const c = t.c || 'Varios';
+                    // Breakdown by Category (normalizado)
+                    const c = normalizeCat(t.c || 'Varios');
                     if (!costBreakdown[c]) costBreakdown[c] = 0;
                     costBreakdown[c] += t.a;
                 }
@@ -1280,7 +1555,7 @@
         function renderBreakdown(key, type) {
             document.getElementById('breakTitle').innerText = `${key} - ${type}`;
             const txs = HISTORY_MAP[key].txs.filter(t => t.t === type);
-            const agg = {}; txs.forEach(t => { if (!agg[t.c]) agg[t.c] = 0; agg[t.c] += t.a; });
+            const agg = {}; txs.forEach(t => { const c = normalizeCat(t.c); if (!agg[c]) agg[c] = 0; agg[c] += t.a; });
             const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
             const list = document.getElementById('breakList'); list.innerHTML = '';
             sorted.forEach(([c, a]) => {
@@ -1297,7 +1572,7 @@
         }
         function renderSubBreakdown(key, type, cat) {
             document.getElementById('subTitle').innerText = cat;
-            const txs = HISTORY_MAP[key].txs.filter(t => t.t === type && t.c === cat);
+            const txs = HISTORY_MAP[key].txs.filter(t => t.t === type && normalizeCat(t.c) === cat);
             const agg = {}; txs.forEach(t => { const s = t.s || 'General'; if (!agg[s]) agg[s] = 0; agg[s] += t.a; });
             const sorted = Object.entries(agg).sort((a, b) => b[1] - a[1]);
             const list = document.getElementById('subList'); list.innerHTML = '';
@@ -1322,6 +1597,292 @@
             t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 4000);
             document.getElementById('sfx-success').play().catch(e => { });
             confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+        }
+
+        /* --- SEARCH (fuzzy) --- */
+        // Normaliza texto: lowercase + sin tildes + trim
+        function normText(s) {
+            return String(s || '')
+                .toLowerCase()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .trim();
+        }
+
+        function runSearch() {
+            const q = normText(document.getElementById('histSearch').value);
+            const results = document.getElementById('searchResults');
+            const content = document.getElementById('historyContent');
+
+            if (q.length < 2) {
+                results.style.display = 'none';
+                content.style.display = 'block';
+                return;
+            }
+
+            content.style.display = 'none';
+            results.style.display = 'block';
+
+            // Tokens separados por espacio: todos deben matchear
+            const tokens = q.split(/\s+/).filter(Boolean);
+            const matched = TRANSACTIONS.filter(t => {
+                if (!t || !t.d) return false;
+                const hay = normText(`${t.desc || ''} ${t.c || ''} ${t.s || ''} ${t.t || ''}`);
+                return tokens.every(tok => hay.includes(tok));
+            }).sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+
+            let totalInc = 0, totalExp = 0;
+            matched.forEach(t => {
+                if (t.t === 'Ingreso') totalInc += t.a;
+                else if (t.t === 'Egreso') totalExp += t.a;
+            });
+            const balance = totalInc - totalExp;
+
+            results.innerHTML = '';
+            const summary = document.createElement('div');
+            summary.className = 'summary-card neu-flat';
+            summary.innerHTML = `
+                <div class="stat-item"><span class="stat-label">${matched.length} resultados</span><span class="stat-val" style="color:var(--primary)">${matched.length}</span></div>
+                <div class="stat-item"><span class="stat-label">Ingresos</span><span class="stat-val income">$${totalInc.toLocaleString()}</span></div>
+                <div class="stat-item"><span class="stat-label">Egresos</span><span class="stat-val expense">$${totalExp.toLocaleString()}</span></div>
+                <div class="stat-item"><span class="stat-label">Balance</span><span class="stat-val" style="color:${balance >= 0 ? 'var(--success)' : 'var(--secondary)'}">$${balance.toLocaleString()}</span></div>
+            `;
+            results.appendChild(summary);
+
+            if (matched.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'text-align:center; color:#888; padding:30px; font-size:0.9rem;';
+                empty.textContent = 'Sin resultados. Probá con otra palabra.';
+                results.appendChild(empty);
+                return;
+            }
+
+            const list = document.createElement('div');
+            list.className = 'list-container';
+            matched.slice(0, 100).forEach(t => {
+                const row = document.createElement('div');
+                row.className = 'list-row neu-flat';
+                const isInc = t.t === 'Ingreso';
+
+                const left = document.createElement('div');
+                left.className = 'row-left';
+                left.style.cssText = 'flex-direction:column; align-items:flex-start; gap:2px;';
+                const title = document.createElement('div');
+                title.style.cssText = 'font-size:0.9rem; font-weight:600;';
+                title.textContent = (normalizeCat(t.c) || '?') + (t.s ? ' · ' + t.s : '');
+                const sub = document.createElement('div');
+                sub.style.cssText = 'font-size:0.75rem; color:#888;';
+                sub.textContent = t.d + (t.desc ? ' — ' + t.desc : '');
+                left.append(title, sub);
+
+                const right = document.createElement('div');
+                right.className = 'row-right';
+                right.style.color = isInc ? 'var(--success)' : 'var(--secondary)';
+                right.textContent = (isInc ? '+' : '-') + '$' + (t.a || 0).toLocaleString();
+
+                row.append(left, right);
+                list.appendChild(row);
+            });
+            results.appendChild(list);
+
+            if (matched.length > 100) {
+                const more = document.createElement('div');
+                more.style.cssText = 'text-align:center; color:#888; padding:10px; font-size:0.8rem;';
+                more.textContent = `+${matched.length - 100} resultados más. Refiná tu búsqueda.`;
+                results.appendChild(more);
+            }
+        }
+
+        /* --- CONFIG VIEW --- */
+        function renderConfig() {
+            // API URL
+            const url = localStorage.getItem('FINANZAS_API_URL') || '';
+            document.getElementById('cfgApiUrlDisplay').innerText = url
+                ? url.substring(0, 50) + (url.length > 50 ? '...' : '')
+                : '(no configurada — modo demo)';
+
+            // Categorías
+            renderCategoryList('Egreso', 'cfgEgresoList');
+            renderCategoryList('Ingreso', 'cfgIngresoList');
+            renderAliasList();
+        }
+
+        function renderCategoryList(type, containerId) {
+            const list = document.getElementById(containerId);
+            list.innerHTML = '';
+            Object.keys(SCHEMA[type] || {}).forEach(cat => {
+                const subs = SCHEMA[type][cat] || [];
+                const row = document.createElement('div');
+                row.className = 'list-row neu-flat';
+                row.style.flexDirection = 'column';
+                row.style.alignItems = 'stretch';
+
+                const header = document.createElement('div');
+                header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; width:100%;';
+                const titleEl = document.createElement('div');
+                titleEl.style.fontWeight = '600';
+                titleEl.textContent = cat;
+                header.appendChild(titleEl);
+
+                const actions = document.createElement('div');
+                actions.style.cssText = 'display:flex; gap:8px;';
+                const btnRename = document.createElement('button');
+                btnRename.className = 'neu-flat';
+                btnRename.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
+                btnRename.textContent = '✏️';
+                btnRename.onclick = () => renameCategory(type, cat);
+                const btnDelete = document.createElement('button');
+                btnDelete.className = 'neu-flat';
+                btnDelete.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
+                btnDelete.textContent = '🗑';
+                btnDelete.onclick = () => deleteCategory(type, cat);
+                actions.append(btnRename, btnDelete);
+                header.appendChild(actions);
+                row.appendChild(header);
+
+                const subsEl = document.createElement('div');
+                subsEl.style.cssText = 'font-size:0.8rem; color:#888; margin-top:8px;';
+                subsEl.textContent = subs.length ? subs.join(' · ') : '(sin subcategorías)';
+                row.appendChild(subsEl);
+
+                const subActions = document.createElement('div');
+                subActions.style.cssText = 'margin-top:8px; display:flex; gap:5px;';
+                const btnAddSub = document.createElement('button');
+                btnAddSub.className = 'neu-flat';
+                btnAddSub.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.75rem;';
+                btnAddSub.textContent = '+ sub';
+                btnAddSub.onclick = () => addSubcategory(type, cat);
+                subActions.appendChild(btnAddSub);
+                if (subs.length) {
+                    const btnEditSubs = document.createElement('button');
+                    btnEditSubs.className = 'neu-flat';
+                    btnEditSubs.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.75rem;';
+                    btnEditSubs.textContent = 'editar subs';
+                    btnEditSubs.onclick = () => editSubcategories(type, cat);
+                    subActions.appendChild(btnEditSubs);
+                }
+                row.appendChild(subActions);
+                list.appendChild(row);
+            });
+        }
+
+        function renderAliasList() {
+            const list = document.getElementById('cfgAliasList');
+            list.innerHTML = '';
+            const keys = Object.keys(ALIASES);
+            if (keys.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'color:#aaa; font-size:0.85rem; text-align:center; padding:10px;';
+                empty.textContent = 'Sin alias configurados';
+                list.appendChild(empty);
+                return;
+            }
+            keys.forEach(oldName => {
+                const row = document.createElement('div');
+                row.className = 'list-row neu-flat';
+                const left = document.createElement('div');
+                left.className = 'row-left';
+                left.style.fontSize = '0.9rem';
+                const oldSpan = document.createElement('span');
+                oldSpan.style.cssText = 'text-decoration:line-through; color:#aaa;';
+                oldSpan.textContent = oldName;
+                const arrow = document.createElement('span');
+                arrow.style.margin = '0 8px';
+                arrow.textContent = '→';
+                const newSpan = document.createElement('span');
+                newSpan.textContent = ALIASES[oldName];
+                left.append(oldSpan, arrow, newSpan);
+                const btn = document.createElement('button');
+                btn.className = 'neu-flat';
+                btn.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
+                btn.textContent = '🗑';
+                btn.onclick = () => deleteAlias(oldName);
+                row.append(left, btn);
+                list.appendChild(row);
+            });
+        }
+
+        function addCategory(type) {
+            const name = prompt(`Nombre de la nueva categoría de ${type}:`);
+            if (!name || !name.trim()) return;
+            const clean = name.trim();
+            if (SCHEMA[type][clean]) { alert('Ya existe esa categoría'); return; }
+            SCHEMA[type][clean] = [];
+            renderConfig();
+        }
+
+        function renameCategory(type, oldName) {
+            const newName = prompt(`Nuevo nombre para "${oldName}":`, oldName);
+            if (!newName || !newName.trim() || newName === oldName) return;
+            const clean = newName.trim();
+            if (SCHEMA[type][clean]) { alert('Ya existe esa categoría'); return; }
+            SCHEMA[type][clean] = SCHEMA[type][oldName];
+            delete SCHEMA[type][oldName];
+            // Alias automático: datos viejos se muestran bajo el nuevo nombre
+            ALIASES[oldName] = clean;
+            renderConfig();
+        }
+
+        function deleteCategory(type, name) {
+            if (!confirm(`¿Eliminar la categoría "${name}"? Los registros históricos no se tocan.`)) return;
+            delete SCHEMA[type][name];
+            renderConfig();
+        }
+
+        function addSubcategory(type, cat) {
+            const name = prompt(`Nueva subcategoría dentro de "${cat}":`);
+            if (!name || !name.trim()) return;
+            if (!SCHEMA[type][cat]) SCHEMA[type][cat] = [];
+            if (SCHEMA[type][cat].includes(name.trim())) { alert('Ya existe'); return; }
+            SCHEMA[type][cat].push(name.trim());
+            renderConfig();
+        }
+
+        function editSubcategories(type, cat) {
+            const current = (SCHEMA[type][cat] || []).join(', ');
+            const input = prompt(`Subcategorías de "${cat}" separadas por coma:`, current);
+            if (input === null) return;
+            SCHEMA[type][cat] = input.split(',').map(s => s.trim()).filter(Boolean);
+            renderConfig();
+        }
+
+        function addAlias() {
+            const oldName = prompt('Nombre viejo (como aparece en el histórico):');
+            if (!oldName || !oldName.trim()) return;
+            const newName = prompt(`"${oldName}" debería mostrarse como:`);
+            if (!newName || !newName.trim()) return;
+            ALIASES[oldName.trim()] = newName.trim();
+            renderConfig();
+        }
+
+        function deleteAlias(oldName) {
+            if (!confirm(`¿Eliminar el alias "${oldName}" → "${ALIASES[oldName]}"?`)) return;
+            delete ALIASES[oldName];
+            renderConfig();
+        }
+
+        async function saveConfig() {
+            showLoader();
+            try {
+                await saveConfigToSheet('schema', SCHEMA);
+                await saveConfigToSheet('aliases', ALIASES);
+                // Re-procesar con nuevas categorías/aliases
+                processHistory();
+                hideLoader();
+                const t = document.getElementById('toast');
+                t.innerText = 'Configuración guardada';
+                t.style.display = 'block';
+                setTimeout(() => t.style.display = 'none', 2500);
+            } catch (e) {
+                hideLoader();
+                alert('Error al guardar: ' + e.message);
+            }
+        }
+
+        function restoreDefaults() {
+            if (!confirm('¿Restaurar categorías y alias por defecto? Se sobrescriben los cambios no guardados.')) return;
+            SCHEMA = JSON.parse(JSON.stringify(SCHEMA_DEFAULT));
+            ALIASES = {...ALIASES_DEFAULT};
+            renderConfig();
         }
     </script>
 </body>
