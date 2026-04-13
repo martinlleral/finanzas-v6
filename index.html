@@ -451,6 +451,41 @@
             color: var(--primary);
             width: 90%;
         }
+        /* Insight bar — frases contextuales sobre los datos */
+        .insight-bar {
+            margin-bottom: 15px;
+            padding: 14px 18px;
+            border-radius: 16px;
+            background-color: var(--bg-color);
+            box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
+            font-size: 0.88rem;
+            line-height: 1.45;
+            color: var(--text-color);
+        }
+
+        .insight-bar.empty { display: none; }
+
+        .insight-bar .insight-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            margin: 4px 0;
+        }
+
+        .insight-bar .insight-item:first-child { margin-top: 0; }
+        .insight-bar .insight-item:last-child { margin-bottom: 0; }
+
+        .insight-bar .insight-icon {
+            flex-shrink: 0;
+            font-size: 1.05rem;
+            line-height: 1.3;
+        }
+
+        .insight-bar.tone-good { border-left: 4px solid var(--success); }
+        .insight-bar.tone-warn { border-left: 4px solid var(--warning); }
+        .insight-bar.tone-bad { border-left: 4px solid var(--secondary); }
+        .insight-bar.tone-info { border-left: 4px solid var(--primary); }
+
         .pay-opt {
             font-size: 0.9rem;
             color: var(--text-muted);
@@ -557,6 +592,7 @@
                 onclick="renderHistory('mdp')" id="bizFilterBtn">Mar de Pan</button>
         </div>
         <label for="histSearch" class="visually-hidden">Buscar transacciones</label>
+        <div id="historyInsights" class="insight-bar empty"></div>
         <input type="text" id="histSearch" class="neu-input" placeholder="🔍 Buscar: Amadeo, Nafta, Sueldos..."
             style="margin-bottom:15px;" spellcheck="false" autocomplete="off" oninput="runSearch()">
         <div id="searchResults" style="display:none;"></div>
@@ -610,6 +646,8 @@
             <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div class="app-title" id="bizViewTitle">Mar de Pan</div>
         </div>
+
+        <div id="mdpInsights" class="insight-bar empty"></div>
 
         <div class="summary-card neu-flat">
             <div class="stat-item">
@@ -670,6 +708,8 @@
             <button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div class="app-title">Hogar</div>
         </div>
+
+        <div id="hogarInsights" class="insight-bar empty"></div>
 
         <div class="summary-card neu-flat">
             <div class="stat-item">
@@ -1017,18 +1057,96 @@
             window.currentContext = prev.context;
         }
 
+        /* --- HELPERS de fecha robustos --- */
+
+        // Convierte cualquier string/Date a formato ISO "YYYY-MM-DD"
+        // Tolera: "2025-11-05", "2025-11-05T12:34:56Z", "Wed Nov 05 2025 00:00:00 GMT-0300",
+        //        "11/05/2025", null, undefined, Date object, etc.
+        function parseDate(v) {
+            if (!v) return '';
+            if (v instanceof Date && !isNaN(v.getTime())) {
+                return v.toISOString().slice(0, 10);
+            }
+            const s = String(v);
+            // Caso happy: ya es ISO
+            if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+            // Intentar parsear (cubre "Wed Nov 05 2025...", "11/05/2025", etc.)
+            const parsed = new Date(s);
+            if (!isNaN(parsed.getTime())) {
+                // toISOString devuelve UTC; para evitar off-by-one por timezone,
+                // compongo manualmente con local date parts.
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const d = String(parsed.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return '';
+        }
+
+        // Devuelve la clave de mes (YYYY-MM) para una transacción, o '' si no se puede.
+        function monthKeyOf(tx) {
+            const iso = parseDate(tx && tx.d);
+            return iso ? iso.slice(0, 7) : '';
+        }
+
         /* --- HELPERS retrocompatibles con categorías históricas --- */
         // Acepta los esquemas que conviven:
         // - BIZ_NAME dinámico (Mar de Pan en modo real, Emprendimiento en demo)
         // - Mar de Pan > Facturación (esquema actual)
         // - Fuentes > Mar de Pan (esquema viejo)
-        // - Hogar > Panadería (esquema muy viejo)
+        //
+        // OJO: "Hogar > Panadería" NO es ingreso de MdP. Es un retiro del dueño:
+        // representa plata que sale del negocio y entra al hogar. Por eso lo trato
+        // como ingreso del Hogar (no se cuenta como facturación de MdP).
+
+        // Detecta si una tx es una "extracción del dueño" en cualquiera de sus
+        // formas históricas. Estas transacciones no son sueldo del personal ni
+        // ingreso real del hogar: son transferencias internas dueño/negocio.
+        function isExtractionLegacy(t) {
+            if (!t) return false;
+            const desc = (t.desc || '').toLowerCase();
+            // Convención "Sueldo Transición" / "Sueldo Trancisión" en MdP/Sueldos
+            if ((t.c === 'MarDePan' || t.c === 'Mar de Pan' || t.c === BIZ_NAME)
+                && t.t === 'Egreso'
+                && (t.s === 'Sueldos' || t.s === 'Sueldo')
+                && (desc.includes('transición') || desc.includes('trancisión') || desc.includes('transicion'))) {
+                return true;
+            }
+            // El otro lado del par: ingreso al Hogar con subcategoría "Panadería"
+            if (t.c === 'Hogar' && t.t === 'Ingreso' && t.s === 'Panadería') {
+                return true;
+            }
+            return false;
+        }
+
+        function isExtractionExp(t) {
+            // Es egreso del negocio que representa retiro del dueño
+            if (!t || t.t !== 'Egreso') return false;
+            if (!(t.c === BIZ_NAME || t.c === 'Mar de Pan' || t.c === 'MarDePan')) return false;
+            if (t.s === 'Extracción') return true;
+            // Legacy: sueldos con descripción "Transición"
+            const desc = (t.desc || '').toLowerCase();
+            if ((t.s === 'Sueldos' || t.s === 'Sueldo')
+                && (desc.includes('transición') || desc.includes('trancisión') || desc.includes('transicion'))) {
+                return true;
+            }
+            return false;
+        }
+
+        function isExtractionInc(t) {
+            // Es ingreso del hogar que representa retiro del negocio (otro lado del par)
+            if (!t || t.t !== 'Ingreso') return false;
+            if (t.c === 'Hogar' && (t.s === 'Extracción' || t.s === 'Panadería')) return true;
+            return false;
+        }
+
         function isMdpIncome(t) {
             if (t.t !== 'Ingreso') return false;
+            // Las extracciones que aparecen como ingresos del hogar NO son ingresos de MdP
+            if (isExtractionInc(t)) return false;
             if (t.c === BIZ_NAME) return true;
             if (t.c === 'Mar de Pan' || t.c === 'MarDePan') return true;
             if (t.c === 'Fuentes' && t.s === 'Mar de Pan') return true;
-            if (t.c === 'Hogar' && t.s === 'Panadería') return true;
             return false;
         }
         function isMdpExpense(t) {
@@ -1045,6 +1163,76 @@
         const SUB_ALIASES = { 'Sueldo': 'Sueldos' };
         function normalizeSub(s) {
             return SUB_ALIASES[s] || s;
+        }
+
+        // Formateo de moneda en pesos argentinos
+        function fmtMoney(n) {
+            const v = Number(n) || 0;
+            return '$' + v.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+        }
+
+        // Devuelve un color del CSS variable (con fallback)
+        function cssVar(name, fallback) {
+            try {
+                const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+                return v || fallback;
+            } catch (e) { return fallback; }
+        }
+
+        // Opciones base para charts de líneas/barras con valores en $
+        function chartMoneyOptions(opts = {}) {
+            return {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: opts.legend !== false, position: 'bottom', labels: { font: { size: 11 } } },
+                    title: opts.title ? { display: true, text: opts.title, font: { size: 13, weight: '600' }, color: cssVar('--text-color', '#3a3a3a'), padding: { bottom: 10 } } : { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const label = ctx.dataset.label || '';
+                                const val = fmtMoney(ctx.parsed.y);
+                                return `${label}: ${val}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { font: { size: 10 } }
+                    },
+                    y: {
+                        beginAtZero: opts.allowNegative !== true,
+                        suggestedMin: opts.allowNegative ? undefined : 0,
+                        ticks: {
+                            font: { size: 10 },
+                            callback: (v) => fmtMoney(v)
+                        }
+                    }
+                }
+            };
+        }
+
+        // Opciones para charts de doughnut/pie (sin ejes)
+        function chartDoughnutOptions(opts = {}) {
+            return {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: opts.legendPosition || 'bottom', labels: { font: { size: 11 } } },
+                    title: opts.title ? { display: true, text: opts.title, font: { size: 13, weight: '600' }, color: cssVar('--text-color', '#3a3a3a'), padding: { bottom: 10 } } : { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const label = ctx.label || '';
+                                const val = fmtMoney(ctx.parsed);
+                                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                const pct = total ? (ctx.parsed / total * 100).toFixed(1) : 0;
+                                return `${label}: ${val} (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            };
         }
 
         // Paleta determinística para charts: misma categoría = mismo color siempre
@@ -1545,10 +1733,14 @@
             HISTORY_MAP = {};
             TRANSACTIONS.forEach(t => {
                 if (!t || !t.d) return;
-                const mk = t.d.substring(0, 7);
+                const mk = monthKeyOf(t);
+                if (!mk) return; // fecha no parseable
+                // Normalizar la fecha del registro al formato ISO para que
+                // el resto del código (export CSV, búsqueda, etc.) la vea bien.
+                t.d = parseDate(t.d);
                 if (!HISTORY_MAP[mk]) HISTORY_MAP[mk] = { inc: 0, exp: 0, txs: [] };
-                if (t.t === 'Ingreso') HISTORY_MAP[mk].inc += t.a;
-                else if (t.t === 'Egreso') HISTORY_MAP[mk].exp += t.a;
+                if (t.t === 'Ingreso') HISTORY_MAP[mk].inc += (Number(t.a) || 0);
+                else if (t.t === 'Egreso') HISTORY_MAP[mk].exp += (Number(t.a) || 0);
                 HISTORY_MAP[mk].txs.push(t);
             });
         }
@@ -1582,8 +1774,8 @@
                     const isMdp = isMdpTx(t);
 
                     if (filterMode === 'total' || (filterMode === 'mdp' && isMdp) || (filterMode === 'hogar' && !isMdp)) {
-                        if (t.t === 'Ingreso') fInc += t.a;
-                        if (t.t === 'Egreso') fExp += t.a;
+                        if (t.t === 'Ingreso') fInc += (Number(t.a) || 0);
+                        if (t.t === 'Egreso') fExp += (Number(t.a) || 0);
                     }
                 });
 
@@ -1598,8 +1790,8 @@
                     const isMdp = isMdpTx(t);
 
                     if (filterMode === 'total' || (filterMode === 'mdp' && isMdp) || (filterMode === 'hogar' && !isMdp)) {
-                        if (t.t === 'Ingreso') fInc += t.a;
-                        if (t.t === 'Egreso') fExp += t.a;
+                        if (t.t === 'Ingreso') fInc += (Number(t.a) || 0);
+                        if (t.t === 'Egreso') fExp += (Number(t.a) || 0);
                     }
                 });
 
@@ -1617,9 +1809,10 @@
                 div.onclick = () => navigate('monthView', { monthKey: m });
                 list.appendChild(div);
             });
-            document.getElementById('globInc').innerText = `$${gInc.toLocaleString()}`;
-            document.getElementById('globExp').innerText = `$${gExp.toLocaleString()}`;
-            document.getElementById('globBal').innerText = `$${(gInc - gExp).toLocaleString()}`;
+            document.getElementById('globInc').innerText = fmtMoney(gInc);
+            document.getElementById('globExp').innerText = fmtMoney(gExp);
+            document.getElementById('globBal').innerText = fmtMoney(gInc - gExp);
+            renderInsights('historyInsights', 'history');
 
             if (histChart) histChart.destroy();
             histChart = new Chart(document.getElementById('historyChart'), {
@@ -1627,12 +1820,12 @@
                 data: {
                     labels: chartLbl,
                     datasets: [
-                        { label: 'Ingresos', data: chartInc, borderColor: '#4caf50', tension: 0.3 },
-                        { label: 'Egresos', data: chartExp, borderColor: '#ff6b6b', tension: 0.3 },
-                        { label: 'Balance', data: chartBal, borderColor: '#4d7cff', tension: 0.3 }
+                        { label: 'Ingresos', data: chartInc, borderColor: cssVar('--success', '#2e7d32'), backgroundColor: 'rgba(46, 125, 50, 0.1)', tension: 0.3 },
+                        { label: 'Egresos', data: chartExp, borderColor: cssVar('--secondary', '#c62828'), backgroundColor: 'rgba(198, 40, 40, 0.1)', tension: 0.3 },
+                        { label: 'Balance', data: chartBal, borderColor: cssVar('--primary', '#1a4dff'), tension: 0.3 }
                     ]
                 },
-                options: { plugins: { legend: { display: true, position: 'bottom' } }, maintainAspectRatio: false }
+                options: chartMoneyOptions({ title: 'Evolución mensual', allowNegative: true })
             });
         }
 
@@ -1672,12 +1865,12 @@
             });
 
             // Metrics
-            const avgSave = count > 0 ? (totalSavingsPct / count).toFixed(1) : 0;
+            const avgSave = count > 0 ? (totalSavingsPct / count).toFixed(1) : '—';
             const avgCost = count > 0 ? Math.round(totalCost / count) : 0;
-            document.getElementById('avgSavings').innerText = `${avgSave}%`;
-            document.getElementById('avgCost').innerText = `$${avgCost.toLocaleString()}`;
+            document.getElementById('avgSavings').innerText = (count > 0 ? `${avgSave}%` : '—');
+            document.getElementById('avgCost').innerText = fmtMoney(avgCost);
 
-            // Chart 1: Savings
+            // Chart 1: Savings (es porcentaje, no $)
             if (tSaveChart) tSaveChart.destroy();
             tSaveChart = new Chart(document.getElementById('savingsTrendChart'), {
                 type: 'line',
@@ -1685,28 +1878,45 @@
                     labels: labels,
                     datasets: [{
                         label: 'Ahorro %', data: savingsData,
-                        borderColor: '#4d7cff', backgroundColor: 'rgba(77, 124, 255, 0.1)',
+                        borderColor: cssVar('--primary', '#1a4dff'),
+                        backgroundColor: 'rgba(26, 77, 255, 0.1)',
                         fill: true, tension: 0.4
                     }]
                 },
                 options: {
-                    plugins: { legend: { display: false } }, maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true, max: 100 } }
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `Ahorro: ${ctx.parsed.y.toFixed(1)}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { callback: (v) => v + '%' }
+                        }
+                    }
                 }
             });
 
-            // Chart 2: Costs
+            // Chart 2: Costs (volumen mensual de gastos)
             if (tCostChart) tCostChart.destroy();
             tCostChart = new Chart(document.getElementById('expensesTrendChart'), {
-                type: 'bar', // Bar for volumes
+                type: 'bar',
                 data: {
                     labels: labels,
                     datasets: [{
                         label: 'Gastos', data: costData,
-                        backgroundColor: '#ff6b6b', borderRadius: 5
+                        backgroundColor: cssVar('--secondary', '#c62828'),
+                        borderRadius: 5
                     }]
                 },
-                options: { plugins: { legend: { display: false } }, maintainAspectRatio: false }
+                options: chartMoneyOptions({ legend: false, title: 'Costo de vida mensual' })
             });
         }
 
@@ -1724,7 +1934,7 @@
 
             // Filter Transactions
             const mdpTxs = TRANSACTIONS.filter(t => {
-                const mk = t.d.substring(0, 7);
+                const mk = monthKeyOf(t);
                 if (!validMonthSet.has(mk)) return false;
 
                 return isMdpTx(t);
@@ -1742,27 +1952,28 @@
             const inversionesListItems = [];
 
             mdpTxs.forEach(t => {
-                const mk = t.d.substring(0, 7);
+                const mk = monthKeyOf(t);
                 if (!flowByMonth[mk]) flowByMonth[mk] = { inc: 0, exp: 0 };
 
                 if (t.t === 'Ingreso') {
-                    totInc += t.a;
-                    flowByMonth[mk].inc += t.a;
+                    totInc += (Number(t.a) || 0);
+                    flowByMonth[mk].inc += (Number(t.a) || 0);
                 } else {
                     if (t.s === 'Inversiones') {
-                        totInv += t.a;
+                        totInv += (Number(t.a) || 0);
                         inversionesListItems.push(t);
-                    } else if (t.s === 'Extracción') {
-                        // Retiro del dueño: no cuenta como costo operativo del negocio
-                        totExtraccion += t.a;
+                    } else if (isExtractionExp(t)) {
+                        // Retiro del dueño (incluye legacy "Sueldo Transición"):
+                        // no es costo operativo del negocio
+                        totExtraccion += (Number(t.a) || 0);
                     } else {
-                        totExp += t.a;
-                        flowByMonth[mk].exp += t.a;
-                        if (t.s === 'Insumos') totInsumos += t.a;
+                        totExp += (Number(t.a) || 0);
+                        flowByMonth[mk].exp += (Number(t.a) || 0);
+                        if (t.s === 'Insumos') totInsumos += (Number(t.a) || 0);
                         // Breakdown
                         const s = normalizeSub(t.s || 'Varios');
                         if (!costBreakdown[s]) costBreakdown[s] = 0;
-                        costBreakdown[s] += t.a;
+                        costBreakdown[s] += (Number(t.a) || 0);
                     }
                 }
             });
@@ -1772,14 +1983,15 @@
             const grossProfit = totInc - totInsumos;
             const marginGross = totInc > 0 ? (grossProfit / totInc) * 100 : 0;
 
-            document.getElementById('mdpInc').innerText = `$${totInc.toLocaleString()}`;
-            document.getElementById('mdpExp').innerText = `$${totExp.toLocaleString()}`;
-            document.getElementById('mdpBal').innerText = `$${net.toLocaleString()}`;
-            document.getElementById('mdpMargin').innerText = `${marginNet.toFixed(1)}%`;
+            document.getElementById('mdpInc').innerText = fmtMoney(totInc);
+            document.getElementById('mdpExp').innerText = fmtMoney(totExp);
+            document.getElementById('mdpBal').innerText = fmtMoney(net);
+            document.getElementById('mdpMargin').innerText = totInc > 0 ? `${marginNet.toFixed(1)}%` : '—';
             const gEl = document.getElementById('mdpMarginGross');
-            if (gEl) gEl.innerText = `${marginGross.toFixed(1)}%`;
+            if (gEl) gEl.innerText = totInc > 0 ? `${marginGross.toFixed(1)}%` : '—';
 
-            document.getElementById('mdpInversionesTot').innerText = `$${totInv.toLocaleString()}`;
+            document.getElementById('mdpInversionesTot').innerText = fmtMoney(totInv);
+            renderInsights('mdpInsights', 'mdp');
             const invListEl = document.getElementById('mdpInversionesList');
             invListEl.innerHTML = '';
 
@@ -1804,12 +2016,12 @@
                 data: {
                     labels: months,
                     datasets: [
-                        { label: 'Ventas', data: incData, borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: true, tension: 0.3 },
-                        { label: 'Costos', data: expData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255, 107, 107, 0.1)', fill: true, tension: 0.3 },
-                        { label: 'Balance', data: balData, borderColor: '#4d7cff', backgroundColor: 'transparent', fill: false, tension: 0.3 }
+                        { label: 'Ventas', data: incData, borderColor: cssVar('--success', '#2e7d32'), backgroundColor: 'rgba(46, 125, 50, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Costos', data: expData, borderColor: cssVar('--secondary', '#c62828'), backgroundColor: 'rgba(198, 40, 40, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Balance', data: balData, borderColor: cssVar('--primary', '#1a4dff'), backgroundColor: 'transparent', fill: false, tension: 0.3 }
                     ]
                 },
-                options: { maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' } } }
+                options: chartMoneyOptions({ title: 'Flujo histórico', allowNegative: true })
             });
 
             // Chart 2: Cost Breakdown
@@ -1825,7 +2037,7 @@
                         borderWidth: 0
                     }]
                 },
-                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+                options: chartDoughnutOptions({ legendPosition: 'right', title: 'Distribución de costos' })
             });
         }
 
@@ -1843,7 +2055,7 @@
 
             // Filter Transactions
             const hogarTxs = TRANSACTIONS.filter(t => {
-                const mk = t.d.substring(0, 7);
+                const mk = monthKeyOf(t);
                 if (!validMonthSet.has(mk)) return false;
 
                 return !isMdpTx(t);
@@ -1855,7 +2067,7 @@
             const flowByMonth = {};
 
             hogarTxs.forEach(t => {
-                const mk = t.d.substring(0, 7);
+                const mk = monthKeyOf(t);
                 if (!flowByMonth[mk]) flowByMonth[mk] = { inc: 0, exp: 0 };
 
                 if (t.t === 'Ingreso') {
@@ -1873,9 +2085,10 @@
 
             const net = totInc - totExp;
 
-            document.getElementById('hogarInc').innerText = `$${totInc.toLocaleString()}`;
-            document.getElementById('hogarExp').innerText = `$${totExp.toLocaleString()}`;
-            document.getElementById('hogarBal').innerText = `$${net.toLocaleString()}`;
+            document.getElementById('hogarInc').innerText = fmtMoney(totInc);
+            document.getElementById('hogarExp').innerText = fmtMoney(totExp);
+            document.getElementById('hogarBal').innerText = fmtMoney(net);
+            renderInsights('hogarInsights', 'hogar');
 
             // Chart 1: Line
             const months = Object.keys(flowByMonth).sort();
@@ -1889,12 +2102,12 @@
                 data: {
                     labels: months,
                     datasets: [
-                        { label: 'Ingresos', data: incData, borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: true, tension: 0.3 },
-                        { label: 'Egresos', data: expData, borderColor: '#ff6b6b', backgroundColor: 'rgba(255, 107, 107, 0.1)', fill: true, tension: 0.3 },
-                        { label: 'Balance', data: balData, borderColor: '#4d7cff', backgroundColor: 'transparent', fill: false, tension: 0.3 }
+                        { label: 'Ingresos', data: incData, borderColor: cssVar('--success', '#2e7d32'), backgroundColor: 'rgba(46, 125, 50, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Egresos', data: expData, borderColor: cssVar('--secondary', '#c62828'), backgroundColor: 'rgba(198, 40, 40, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'Balance', data: balData, borderColor: cssVar('--primary', '#1a4dff'), backgroundColor: 'transparent', fill: false, tension: 0.3 }
                     ]
                 },
-                options: { maintainAspectRatio: false, plugins: { legend: { display: true, position: 'bottom' } } }
+                options: chartMoneyOptions({ title: 'Flujo histórico Hogar', allowNegative: true })
             });
 
             // Chart 2: Cost Breakdown
@@ -1910,7 +2123,7 @@
                         borderWidth: 0
                     }]
                 },
-                options: { maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+                options: chartDoughnutOptions({ legendPosition: 'right', title: 'Distribución de gastos Hogar' })
             });
         }
 
@@ -1920,13 +2133,22 @@
         function renderMonth(key) {
             document.getElementById('monthTitle').innerText = key;
             const d = HISTORY_MAP[key] || { inc: 0, exp: 0 };
-            document.getElementById('monthInc').innerText = `$${d.inc.toLocaleString()}`;
-            document.getElementById('monthExp').innerText = `$${d.exp.toLocaleString()}`;
-            document.getElementById('monthBal').innerText = `$${(d.inc - d.exp).toLocaleString()}`;
+            document.getElementById('monthInc').innerText = fmtMoney(d.inc);
+            document.getElementById('monthExp').innerText = fmtMoney(d.exp);
+            document.getElementById('monthBal').innerText = fmtMoney(d.inc - d.exp);
             if (mChart) mChart.destroy();
             mChart = new Chart(document.getElementById('monthFlowChart').getContext('2d'), {
-                type: 'bar', data: { labels: ['Ing', 'Egr'], datasets: [{ data: [d.inc, d.exp], backgroundColor: ['#4caf50', '#ff6b6b'], borderRadius: 15 }] },
-                options: { plugins: { legend: { display: false } }, maintainAspectRatio: false }
+                type: 'bar',
+                data: {
+                    labels: ['Ingresos', 'Egresos'],
+                    datasets: [{
+                        label: 'Monto',
+                        data: [d.inc, d.exp],
+                        backgroundColor: [cssVar('--success', '#2e7d32'), cssVar('--secondary', '#c62828')],
+                        borderRadius: 15
+                    }]
+                },
+                options: chartMoneyOptions({ legend: false })
             });
         }
         function drillDownMonth(type) { navigate('breakdownView', { monthKey: window.currentContext.monthKey, type: type }); }
@@ -1946,7 +2168,7 @@
             if (bChart) bChart.destroy();
             bChart = new Chart(document.getElementById('breakChart'), {
                 type: 'doughnut', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
-                options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                options: chartDoughnutOptions({ legendPosition: 'bottom' })
             });
         }
         function renderSubBreakdown(key, type, cat) {
@@ -1965,7 +2187,7 @@
             if (sChart) sChart.destroy();
             sChart = new Chart(document.getElementById('subChart'), {
                 type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
-                options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                options: chartDoughnutOptions({ legendPosition: 'bottom' })
             });
         }
 
@@ -2264,6 +2486,211 @@
             renderConfig();
         }
 
+        /* --- INSIGHTS: frases contextuales sobre los datos --- */
+
+        // Configuración del fondo de reserva
+        const RESERVE_TARGET_MONTHS = 3;
+
+        // Devuelve la lista de meses ordenados con datos relevantes
+        function _sortedMonths() {
+            return Object.keys(HISTORY_MAP).filter(k => k && /^\d{4}-\d{2}$/.test(k)).sort();
+        }
+
+        // Promedio mensual de egresos NO-MdP (gasto del hogar real)
+        function _avgMonthlyHogarExp() {
+            const months = _sortedMonths();
+            if (!months.length) return 0;
+            let total = 0, count = 0;
+            const lastSix = months.slice(-6);
+            lastSix.forEach(m => {
+                let exp = 0;
+                HISTORY_MAP[m].txs.forEach(t => {
+                    if (t.t === 'Egreso' && !isMdpTx(t)) exp += (Number(t.a) || 0);
+                });
+                total += exp; count++;
+            });
+            return count > 0 ? total / count : 0;
+        }
+
+        // Balance acumulado del hogar (proxy del fondo de reserva)
+        function _hogarReserve() {
+            let inc = 0, exp = 0;
+            TRANSACTIONS.forEach(t => {
+                if (!isMdpTx(t)) {
+                    if (t.t === 'Ingreso') inc += (Number(t.a) || 0);
+                    if (t.t === 'Egreso') exp += (Number(t.a) || 0);
+                }
+            });
+            return inc - exp;
+        }
+
+        // Para una vista, devuelve un array de objetos {icon, text, tone}
+        function computeInsights(view) {
+            const insights = [];
+            const months = _sortedMonths();
+            if (!months.length) return insights;
+            const lastMonth = months[months.length - 1];
+            const prevMonth = months.length > 1 ? months[months.length - 2] : null;
+
+            // Helpers locales
+            const monthName = (k) => {
+                if (!k) return '';
+                const [y, m] = k.split('-');
+                const names = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+                return names[parseInt(m, 10) - 1] + ' ' + y;
+            };
+
+            // Totales por mes y tipo
+            function monthTotals(mk, scope) {
+                const d = HISTORY_MAP[mk];
+                if (!d) return { inc: 0, exp: 0, n: 0 };
+                let inc = 0, exp = 0, n = 0;
+                d.txs.forEach(t => {
+                    const isMdp = isMdpTx(t);
+                    if (scope === 'mdp' && !isMdp) return;
+                    if (scope === 'hogar' && isMdp) return;
+                    if (t.t === 'Ingreso') inc += (Number(t.a) || 0);
+                    else if (t.t === 'Egreso') {
+                        // Excluir extracciones del egreso operativo de MdP
+                        if (scope === 'mdp' && isExtractionExp(t)) return;
+                        exp += (Number(t.a) || 0);
+                    }
+                    n++;
+                });
+                return { inc, exp, n };
+            }
+
+            // === COMÚN: fondo de reserva (aplica a Home, Historial, Hogar) ===
+            if (view === 'home' || view === 'history' || view === 'hogar') {
+                const reserve = _hogarReserve();
+                const avgExp = _avgMonthlyHogarExp();
+                if (avgExp > 0) {
+                    const monthsCovered = reserve / avgExp;
+                    const target = avgExp * RESERVE_TARGET_MONTHS;
+                    if (reserve <= 0) {
+                        insights.push({ icon: '🚨', tone: 'bad', text: `Tu fondo de reserva es negativo. Estás operando con plata que no tenés.` });
+                    } else if (monthsCovered < 1) {
+                        insights.push({ icon: '🔴', tone: 'bad', text: `Alerta: tu reserva (${fmtMoney(reserve)}) cubre menos de 1 mes de gastos. Estás tocando el colchón.` });
+                    } else if (reserve < target) {
+                        insights.push({ icon: '🟡', tone: 'warn', text: `Tu reserva cubre ${monthsCovered.toFixed(1)} meses. Debajo del objetivo de ${RESERVE_TARGET_MONTHS} meses (${fmtMoney(target)}).` });
+                    } else {
+                        insights.push({ icon: '💪', tone: 'good', text: `Tu fondo de reserva está sólido: ${fmtMoney(reserve)} cubre ${monthsCovered.toFixed(1)} meses de gastos.` });
+                    }
+                }
+            }
+
+            // === HISTORY: balance del último mes vs anterior ===
+            if (view === 'history' || view === 'home') {
+                const last = monthTotals(lastMonth, 'all');
+                const balance = last.inc - last.exp;
+                if (last.inc > 0 || last.exp > 0) {
+                    if (balance > 0 && last.inc > 0 && balance / last.inc > 0.15) {
+                        insights.push({ icon: '💚', tone: 'good', text: `${monthName(lastMonth)} cerró bien: ${fmtMoney(last.inc)} de ingresos, ${fmtMoney(last.exp)} de egresos. Balance positivo de ${fmtMoney(balance)}.` });
+                    } else if (balance < 0 && Math.abs(balance) / Math.max(last.inc, 1) > 0.15) {
+                        insights.push({ icon: '⚠️', tone: 'warn', text: `${monthName(lastMonth)} quedó en rojo: gastaste ${(Math.abs(balance) / Math.max(last.inc, 1) * 100).toFixed(0)}% más de lo que entró. Revisá si fueron gastos puntuales.` });
+                    } else if (Math.abs(balance) / Math.max(last.inc, 1) < 0.05 && last.inc > 0) {
+                        insights.push({ icon: '⚪', tone: 'info', text: `${monthName(lastMonth)} cerró equilibrado (${fmtMoney(balance)}). Casi en cero.` });
+                    }
+                }
+
+                // Tres meses negativos consecutivos
+                if (months.length >= 3) {
+                    const last3 = months.slice(-3);
+                    const allNeg = last3.every(mk => {
+                        const tot = monthTotals(mk, 'all');
+                        return (tot.inc - tot.exp) < 0;
+                    });
+                    if (allNeg) {
+                        insights.push({ icon: '🚨', tone: 'bad', text: `Tres meses seguidos en rojo. Hora de ajustar.` });
+                    }
+                }
+            }
+
+            // === MDP: margen, food cost, extracciones ===
+            if (view === 'mdp') {
+                // Calcular del mes actual MdP
+                let totInc = 0, totExp = 0, totInsumos = 0, totExtraccion = 0;
+                const last = HISTORY_MAP[lastMonth];
+                if (last) {
+                    last.txs.forEach(t => {
+                        if (!isMdpTx(t)) return;
+                        if (t.t === 'Ingreso') totInc += (Number(t.a) || 0);
+                        else if (t.s === 'Inversiones') { /* CAPEX, no opera */ }
+                        else if (isExtractionExp(t)) totExtraccion += (Number(t.a) || 0);
+                        else {
+                            totExp += (Number(t.a) || 0);
+                            if (t.s === 'Insumos') totInsumos += (Number(t.a) || 0);
+                        }
+                    });
+                }
+
+                if (totInc > 0) {
+                    const marginNet = (totInc - totExp) / totInc * 100;
+                    const foodCost = totInsumos / totInc * 100;
+                    if (marginNet < 10) {
+                        insights.push({ icon: '📉', tone: 'bad', text: `${monthName(lastMonth)}: margen neto bajo a ${marginNet.toFixed(1)}%. Tu negocio está apretado.` });
+                    } else if (marginNet > 40) {
+                        insights.push({ icon: '🥖', tone: 'good', text: `${monthName(lastMonth)}: margen neto saludable de ${marginNet.toFixed(1)}%.` });
+                    }
+                    if (foodCost < 15 && totInsumos > 0) {
+                        insights.push({ icon: '🌾', tone: 'info', text: `Tu food cost es ${foodCost.toFixed(1)}%. Verificá si hay insumos cargados en otra subcategoría.` });
+                    } else if (foodCost > 40) {
+                        insights.push({ icon: '🌾', tone: 'warn', text: `Tu food cost subió a ${foodCost.toFixed(1)}%. ¿Cambió el precio de los insumos?` });
+                    }
+                    if (totExtraccion > 0) {
+                        const extPct = totExtraccion / totInc * 100;
+                        insights.push({ icon: '💰', tone: 'info', text: `Este mes te llevaste ${fmtMoney(totExtraccion)} (${extPct.toFixed(0)}% de las ventas).` });
+                    }
+                }
+
+                // Comparativa contra mes anterior
+                if (prevMonth) {
+                    const cur = monthTotals(lastMonth, 'mdp');
+                    const prev = monthTotals(prevMonth, 'mdp');
+                    if (prev.inc > 0) {
+                        const change = (cur.inc - prev.inc) / prev.inc * 100;
+                        if (Math.abs(change) > 20) {
+                            const arrow = change > 0 ? '📈' : '📉';
+                            const tone = change > 0 ? 'good' : 'warn';
+                            insights.push({ icon: arrow, tone, text: `Facturación ${change > 0 ? 'subió' : 'cayó'} ${Math.abs(change).toFixed(0)}% vs ${monthName(prevMonth)}.` });
+                        }
+                    }
+                }
+            }
+
+            // === HOGAR: alerta gastos vs promedio ===
+            if (view === 'hogar') {
+                const avgExp = _avgMonthlyHogarExp();
+                const cur = monthTotals(lastMonth, 'hogar');
+                if (avgExp > 0 && cur.exp > avgExp * 1.2) {
+                    insights.push({ icon: '🏠', tone: 'warn', text: `${monthName(lastMonth)}: gastaste ${((cur.exp / avgExp - 1) * 100).toFixed(0)}% más que tu promedio mensual.` });
+                }
+            }
+
+            return insights;
+        }
+
+        // Renderiza la barra de insights en el contenedor dado
+        function renderInsights(containerId, view) {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            const insights = computeInsights(view);
+            if (insights.length === 0) {
+                el.classList.add('empty');
+                el.innerHTML = '';
+                return;
+            }
+            el.classList.remove('empty');
+            // Tono dominante: el más severo
+            const order = ['bad', 'warn', 'info', 'good'];
+            const dominantTone = order.find(t => insights.some(i => i.tone === t)) || 'info';
+            el.className = 'insight-bar tone-' + dominantTone;
+            el.innerHTML = insights.slice(0, 3).map(i => {
+                const txt = String(i.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                return `<div class="insight-item"><span class="insight-icon" aria-hidden="true">${i.icon}</span><span>${txt}</span></div>`;
+            }).join('');
+        }
+
         /* --- EXPORT CSV --- */
         function csvEscape(v) {
             const s = String(v == null ? '' : v);
@@ -2275,7 +2702,7 @@
             let txs = TRANSACTIONS.filter(t => t && t.d && t.t !== CONFIG_MARKER);
             if (scope === 'month') {
                 const currentMonth = new Date().toISOString().slice(0, 7);
-                txs = txs.filter(t => t.d.substring(0, 7) === currentMonth);
+                txs = txs.filter(t => monthKeyOf(t) === currentMonth);
             }
             txs.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
 
