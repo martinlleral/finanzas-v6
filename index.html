@@ -450,6 +450,19 @@
             color: var(--primary);
             width: 90%;
         }
+        .pay-opt {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            user-select: none;
+            transition: all 0.15s ease;
+        }
+
+        .pay-opt.selected {
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
         .demo-badge {
             position: fixed;
             bottom: 10px;
@@ -610,8 +623,12 @@
                 <span class="stat-label">Resultado</span>
                 <span id="mdpBal" class="stat-val balance">$0</span>
             </div>
-            <div class="stat-item">
-                <span class="stat-label">Margen</span>
+            <div class="stat-item" title="Ventas menos costo directo (Insumos)">
+                <span class="stat-label">Margen Bruto</span>
+                <span id="mdpMarginGross" class="stat-val" style="color:var(--primary)">0%</span>
+            </div>
+            <div class="stat-item" style="grid-column: span 2;" title="Margen después de todos los costos operativos (sin inversiones)">
+                <span class="stat-label">Margen Neto</span>
                 <span id="mdpMargin" class="stat-val" style="color:var(--primary)">0%</span>
             </div>
         </div>
@@ -716,9 +733,16 @@
         <div id="cfgAliasList" class="list-container" style="padding-bottom:10px;"></div>
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addAlias()">+ Agregar alias</button>
 
-        <div style="display:flex; gap:10px; margin-bottom:30px;">
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
             <button class="big-btn btn-primary" style="flex:1;" onclick="saveConfig()">💾 Guardar y sincronizar</button>
             <button class="neu-flat" style="flex:0.5; padding:15px; border-radius:20px; cursor:pointer;" onclick="restoreDefaults()">Restaurar</button>
+        </div>
+
+        <h3 style="color:#555; margin:20px 0 10px 0;">📤 Exportar</h3>
+        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Descarga todas las transacciones como CSV (compatible con Excel en Windows).</div>
+        <div style="display:flex; gap:10px; margin-bottom:30px;">
+            <button class="neu-flat" style="flex:1; padding:12px; border-radius:12px; cursor:pointer;" onclick="exportCSV('all')">Todo el histórico</button>
+            <button class="neu-flat" style="flex:1; padding:12px; border-radius:12px; cursor:pointer;" onclick="exportCSV('month')">Este mes</button>
         </div>
     </div>
 
@@ -764,8 +788,21 @@
             <div class="preview-path" id="prevPath">...</div>
             <div class="preview-amount" id="prevAmount">$0</div>
         </div>
+        <div style="margin-bottom:15px;">
+            <label for="txDate" style="color:#5e5e5e; margin-bottom:6px; display:block; font-size:0.9rem;">Fecha</label>
+            <input type="date" id="txDate" class="neu-input">
+        </div>
+        <div style="margin-bottom:15px;">
+            <div style="color:#5e5e5e; margin-bottom:6px; font-size:0.9rem;">Forma de pago</div>
+            <div id="payMethodGroup" role="radiogroup" aria-label="Forma de pago" style="display:flex; gap:10px;">
+                <button type="button" class="neu-flat pay-opt" data-pay="" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">—</button>
+                <button type="button" class="neu-flat pay-opt" data-pay="Efectivo" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Efectivo</button>
+                <button type="button" class="neu-flat pay-opt" data-pay="Banco" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Banco</button>
+                <button type="button" class="neu-flat pay-opt" data-pay="MP" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">MP</button>
+            </div>
+        </div>
         <div style="margin-bottom:20px;">
-            <label for="descInput" style="color:#5e5e5e; margin-bottom:10px; display:block;">Descripción (Opcional)</label>
+            <label for="descInput" style="color:#5e5e5e; margin-bottom:6px; display:block; font-size:0.9rem;">Descripción (Opcional)</label>
             <input type="text" id="descInput" class="neu-input" placeholder="Ej: Compra del domingo..."
                 spellcheck="false" autocomplete="off">
         </div>
@@ -803,12 +840,12 @@
             Egreso: {
                 'Alimentación': ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
                 'HogarYVida': ['Familia', 'Regalos', 'Varios', 'Salud', 'Actividades', 'Salidas', 'Indumentaria', 'Mascota', 'Servicios', 'Mantenimiento', 'Infraestructura'],
-                'Mar de Pan': ['Sueldos', 'Alquiler', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento', 'Extracción'],
+                'Mar de Pan': ['Insumos', 'Packaging', 'Sueldos', 'Alquiler', 'Servicios', 'Impuestos', 'Comisiones', 'Marketing', 'Mermas', 'Inversiones', 'Mantenimiento', 'Varios', 'Extracción'],
                 'Movilidad': ['Seguro', 'Peajes', 'Nafta', 'Mecánica', 'Transporte'],
                 'Proyectos': [],
             },
             Ingreso: {
-                'Mar de Pan': ['Facturación', 'Otros'],
+                'Mar de Pan': ['Mostrador', 'Mayorista', 'Delivery', 'Eventos', 'Facturación', 'Otros'],
                 'Hogar': ['Sueldo', 'Freelance', 'Changas', 'Devoluciones', 'Otros']
             }
         };
@@ -818,12 +855,12 @@
             Egreso: {
                 'Alimentación': ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
                 'Hogar': ['Servicios', 'Salud', 'Salidas', 'Indumentaria', 'Mantenimiento', 'Regalos', 'Varios'],
-                'Emprendimiento': ['Sueldos', 'Alquiler', 'Insumos', 'Inversiones', 'Servicios', 'Varios', 'Mantenimiento'],
+                'Emprendimiento': ['Insumos', 'Packaging', 'Sueldos', 'Alquiler', 'Servicios', 'Impuestos', 'Comisiones', 'Marketing', 'Mermas', 'Inversiones', 'Mantenimiento', 'Varios'],
                 'Movilidad': ['Seguro', 'Peajes', 'Nafta', 'Mecánica', 'Transporte'],
                 'Proyectos': [],
             },
             Ingreso: {
-                'Emprendimiento': ['Facturación', 'Otros'],
+                'Emprendimiento': ['Mostrador', 'Mayorista', 'Delivery', 'Eventos', 'Facturación', 'Otros'],
                 'Hogar': ['Sueldo', 'Freelance', 'Changas', 'Devoluciones', 'Otros']
             }
         };
@@ -1046,27 +1083,75 @@
             document.getElementById('prevAmount').innerText = `$${currentTx.amount.toLocaleString()}`;
             document.getElementById('prevPath').innerText = `${currentTx.type} / ${currentTx.category} ${sub ? '/ ' + sub : ''}`;
             document.getElementById('descInput').value = '';
+            // Default fecha = hoy
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById('txDate').value = today;
+            // Reset medio de pago a ninguno
+            currentTx.paymentMethod = '';
+            document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('selected'));
+            document.querySelector('.pay-opt[data-pay=""]').classList.add('selected');
             setTimeout(() => document.getElementById('descInput').focus(), 300);
         }
+
+        // Click handler para los botones de medio de pago
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.pay-opt');
+            if (!btn) return;
+            const payGroup = btn.parentElement;
+            payGroup.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            currentTx.paymentMethod = btn.dataset.pay || '';
+        });
         function cancelConfirm() {
             document.getElementById('confirmView').classList.remove('active');
             document.getElementById('homeView').classList.add('active');
         }
         function submitFinal() {
             currentTx.desc = document.getElementById('descInput').value;
+            const txDate = document.getElementById('txDate').value || new Date().toISOString().slice(0, 10);
+            const payMethod = currentTx.paymentMethod || '';
+
             document.getElementById('confirmView').classList.remove('active');
             document.getElementById('homeView').classList.add('active');
 
-            // Optimistic update: agregar al array local inmediatamente
+            // Construcción de la transacción principal
             const newTx = {
-                d: new Date().toISOString().slice(0, 10),
+                d: txDate,
                 t: currentTx.type,
                 c: currentTx.category,
                 s: currentTx.subcategory,
                 a: currentTx.amount,
-                desc: currentTx.desc
+                desc: currentTx.desc,
+                p: payMethod
             };
-            TRANSACTIONS.push(newTx);
+
+            // T2.2 Extracción como transferencia dual:
+            // - Egreso del negocio (tx original)
+            // - Ingreso del Hogar con subcategoría "Extracción"
+            // Marcamos ambas filas con un tag en desc para trazabilidad.
+            const isExtraction = (
+                currentTx.type === 'Egreso' &&
+                currentTx.subcategory === 'Extracción'
+            );
+
+            const txsToCommit = [newTx];
+            if (isExtraction) {
+                const pairTag = 'Extracción→Hogar';
+                newTx.desc = (newTx.desc ? newTx.desc + ' · ' : '') + pairTag;
+                txsToCommit.push({
+                    d: txDate,
+                    t: 'Ingreso',
+                    c: 'Hogar',
+                    s: 'Extracción',
+                    a: currentTx.amount,
+                    desc: (currentTx.desc ? currentTx.desc + ' · ' : '') + pairTag,
+                    p: payMethod
+                });
+            }
+
+            // Optimistic update: agregar al array local inmediatamente
+            txsToCommit.forEach(tx => OPTIMISTIC_TXS.push(tx));
+            TRANSACTIONS = TRANSACTIONS.concat(txsToCommit);
             if (!IS_DEMO) localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
             processHistory();
             inputVal = ""; document.getElementById('displayAmount').innerText = "0";
@@ -1074,51 +1159,100 @@
 
             // Sync en background (no bloquea UI)
             if (API_URL) {
-                syncTransaction(newTx);
+                enqueueSync(txsToCommit);
             }
         }
 
-        // Cola de transacciones pendientes de sincronizar
+        /* --- SYNC: buffer de transacciones optimistas + cola persistente --- */
+
+        // Transacciones que ya están en TRANSACTIONS localmente pero todavía no
+        // confirmamos que llegaron al sheet. Si fetchSync reemplaza TRANSACTIONS
+        // con lo del sheet, las de este buffer se reinyectan.
+        let OPTIMISTIC_TXS = [];
+
+        // Cola de intents de POST que están pendientes de sincronizar
+        let PENDING_QUEUE = JSON.parse(localStorage.getItem('FINANZAS_PENDING') || '[]');
         let PENDING_SYNC = 0;
+
+        function savePendingQueue() {
+            localStorage.setItem('FINANZAS_PENDING', JSON.stringify(PENDING_QUEUE));
+        }
+
         function updatePendingIndicator() {
             const syncBtn = document.getElementById('syncBtn');
             if (!syncBtn) return;
-            if (PENDING_SYNC > 0) {
-                syncBtn.innerText = `⏳${PENDING_SYNC}`;
+            const total = PENDING_SYNC + PENDING_QUEUE.length;
+            if (total > 0) {
+                syncBtn.innerText = `⏳${total}`;
                 syncBtn.style.color = 'var(--warning)';
+                syncBtn.setAttribute('aria-label', `Sincronizando (${total} pendientes)`);
             } else {
                 syncBtn.innerText = '🔄';
                 syncBtn.style.color = '';
+                syncBtn.setAttribute('aria-label', 'Sincronizar con servidor');
             }
         }
 
-        async function syncTransaction(tx) {
-            PENDING_SYNC++;
+        function enqueueSync(txs) {
+            // txs puede ser una tx sola o un array (para extracción dual)
+            const batch = Array.isArray(txs) ? txs : [txs];
+            PENDING_QUEUE.push({ id: Date.now() + Math.random(), txs: batch, attempts: 0 });
+            savePendingQueue();
             updatePendingIndicator();
-            try {
-                await fetch(API_URL, {
-                    method: 'POST', mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'addTransaction',
-                        date: new Date().toISOString(),
-                        type: tx.t,
-                        category: tx.c,
-                        subcategory: tx.s,
-                        amount: tx.a,
-                        description: tx.desc
-                    })
-                });
-            } catch (e) {
-                console.error('Sync error:', e);
-                const t = document.getElementById('toast');
-                t.innerText = '⚠️ Error al sincronizar';
-                t.style.color = 'var(--secondary)';
-                t.style.display = 'block';
-                setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 3500);
-            } finally {
-                PENDING_SYNC--;
+            processPendingQueue();
+        }
+
+        async function processPendingQueue() {
+            if (!API_URL) return;
+            while (PENDING_QUEUE.length > 0) {
+                const item = PENDING_QUEUE[0];
+                PENDING_SYNC++;
                 updatePendingIndicator();
+                try {
+                    // Enviar cada tx del batch individualmente como addTransaction.
+                    // Esto garantiza compatibilidad con el Apps Script viejo y nuevo.
+                    for (const tx of item.txs) {
+                        await fetch(API_URL, {
+                            method: 'POST', mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'addTransaction',
+                                date: tx.d,
+                                type: tx.t,
+                                category: tx.c,
+                                subcategory: tx.s,
+                                amount: tx.a,
+                                description: tx.desc,
+                                paymentMethod: tx.p || ''
+                            })
+                        });
+                    }
+                    // Éxito asumido (no-cors no permite leer respuesta)
+                    PENDING_QUEUE.shift();
+                    // Quitar estas tx del buffer optimistic (ya están en el sheet)
+                    item.txs.forEach(tx => {
+                        const idx = OPTIMISTIC_TXS.indexOf(tx);
+                        if (idx !== -1) OPTIMISTIC_TXS.splice(idx, 1);
+                    });
+                    savePendingQueue();
+                } catch (e) {
+                    console.error('Sync error:', e);
+                    item.attempts++;
+                    if (item.attempts >= 3) {
+                        // Después de 3 intentos la sacamos para que no bloquee
+                        PENDING_QUEUE.shift();
+                        savePendingQueue();
+                        const t = document.getElementById('toast');
+                        t.innerText = '⚠️ Transacción no pudo sincronizarse';
+                        t.style.color = 'var(--secondary)';
+                        t.style.display = 'block';
+                        setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 4000);
+                    }
+                    break; // Cortar el loop para reintentar después
+                } finally {
+                    PENDING_SYNC--;
+                    updatePendingIndicator();
+                }
             }
         }
 
@@ -1139,26 +1273,39 @@
 
         // Extrae filas de config del raw, aplica la más reciente y devuelve las transacciones limpias
         function extractConfig(raw) {
+            // Primero separamos tx reales de filas __CONFIG__ y juntamos todas las
+            // de config en un array para poder ordenar por fecha desc y quedarnos
+            // con la más reciente de cada tipo (schema/aliases).
             const txs = [];
-            const configs = { schema: null, aliases: null };
+            const configRows = [];
             raw.forEach(r => {
                 if (r && r.t === CONFIG_MARKER) {
-                    try {
-                        const payload = JSON.parse(atob(r.desc || ''));
-                        if (r.c === 'schema') configs.schema = { data: payload, date: r.d };
-                        if (r.c === 'aliases') configs.aliases = { data: payload, date: r.d };
-                    } catch (e) { console.warn('Config row corrupta:', r); }
+                    configRows.push(r);
                 } else if (r && r.d && r.t) {
                     txs.push(r);
                 }
             });
-            if (configs.schema) {
-                SCHEMA = configs.schema.data;
-                localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
+
+            // Ordenar config rows por fecha desc y quedarse con la primera de cada tipo
+            configRows.sort((a, b) => String(b.d || '').localeCompare(String(a.d || '')));
+            const latest = { schema: null, aliases: null };
+            for (const r of configRows) {
+                if (r.c === 'schema' && !latest.schema) latest.schema = r;
+                if (r.c === 'aliases' && !latest.aliases) latest.aliases = r;
+                if (latest.schema && latest.aliases) break;
             }
-            if (configs.aliases) {
-                ALIASES = configs.aliases.data;
-                localStorage.setItem('FINANZAS_ALIASES', JSON.stringify(ALIASES));
+
+            if (latest.schema) {
+                try {
+                    SCHEMA = JSON.parse(atob(latest.schema.desc || ''));
+                    localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
+                } catch (e) { console.warn('Config schema corrupta:', e); }
+            }
+            if (latest.aliases) {
+                try {
+                    ALIASES = JSON.parse(atob(latest.aliases.desc || ''));
+                    localStorage.setItem('FINANZAS_ALIASES', JSON.stringify(ALIASES));
+                } catch (e) { console.warn('Config aliases corrupta:', e); }
             }
             return txs;
         }
@@ -1188,17 +1335,23 @@
         }
 
         async function fetchSync() {
-            if (!API_URL) return;
+            if (!API_URL) return false;
             try {
                 const res = await fetch(`${API_URL}?action=getRawData`);
                 const raw = await res.json();
                 // Extraer configuración y separar transacciones reales
                 const cleanTxs = extractConfig(raw);
 
+                // Reinyectar tx optimistas que aún no llegaron al server
+                // (evita que desaparezcan del UI mientras están en la cola).
+                const merged = OPTIMISTIC_TXS.length > 0
+                    ? cleanTxs.concat(OPTIMISTIC_TXS)
+                    : cleanTxs;
+
                 // Actualizar solo si hay cambios
-                if (JSON.stringify(TRANSACTIONS) !== JSON.stringify(cleanTxs)) {
-                    TRANSACTIONS = cleanTxs;
-                    localStorage.setItem('FINANZAS_CACHE', JSON.stringify(cleanTxs));
+                if (JSON.stringify(TRANSACTIONS) !== JSON.stringify(merged)) {
+                    TRANSACTIONS = merged;
+                    localStorage.setItem('FINANZAS_CACHE', JSON.stringify(merged));
                     processHistory();
 
                     // Re-renderizar panel activo
@@ -1210,7 +1363,8 @@
                         if (act.id === 'hogarView') renderHogar(currentHogarFilter);
                     }
                 }
-            } catch (e) { console.error(e); }
+                return true;
+            } catch (e) { console.error('fetchSync error:', e); return false; }
         }
 
         function configureApi() {
@@ -1234,11 +1388,15 @@
 
         async function forceRefresh() {
             showLoader();
-            await fetchSync();
+            // Primero reintentar la cola pendiente
+            await processPendingQueue();
+            const ok = await fetchSync();
             hideLoader();
             const t = document.getElementById('toast');
-            t.innerText = "Sincronizado";
-            t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 3000);
+            t.innerText = ok ? "Sincronizado" : "⚠️ Error al sincronizar";
+            t.style.color = ok ? '' : 'var(--secondary)';
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 3000);
         }
 
         // Soporte de teclado físico (numpad incluido) en la vista Home
@@ -1307,6 +1465,9 @@
                 document.getElementById('syncBtn').style.pointerEvents = 'none';
                 applyDemoLabels();
             }
+            // Mostrar inmediatamente pendientes (de sesiones anteriores) y procesar
+            updatePendingIndicator();
+            if (PENDING_QUEUE.length > 0) processPendingQueue();
             fetchData();
         });
         function processHistory() {
@@ -1499,7 +1660,12 @@
             });
 
             // Totals
-            let totInc = 0, totExp = 0, totInv = 0;
+            // Distingo:
+            // - totInsumos: costo directo (food cost) → para margen bruto
+            // - totExp: todo el gasto operativo NO-inversión (incluye insumos, sueldos, etc.)
+            // - totInv: inversiones (CAPEX, excluidas de márgenes)
+            // - totExtraccion: retiros del dueño (NO son costo operativo, son distribución)
+            let totInc = 0, totExp = 0, totInv = 0, totInsumos = 0, totExtraccion = 0;
             const costBreakdown = {};
             const flowByMonth = {}; // YYYY-MM -> {inc, exp}
             const inversionesListItems = [];
@@ -1515,9 +1681,13 @@
                     if (t.s === 'Inversiones') {
                         totInv += t.a;
                         inversionesListItems.push(t);
+                    } else if (t.s === 'Extracción') {
+                        // Retiro del dueño: no cuenta como costo operativo del negocio
+                        totExtraccion += t.a;
                     } else {
                         totExp += t.a;
                         flowByMonth[mk].exp += t.a;
+                        if (t.s === 'Insumos') totInsumos += t.a;
                         // Breakdown
                         const s = normalizeSub(t.s || 'Varios');
                         if (!costBreakdown[s]) costBreakdown[s] = 0;
@@ -1527,12 +1697,16 @@
             });
 
             const net = totInc - totExp;
-            const margin = totInc > 0 ? (net / totInc) * 100 : 0;
+            const marginNet = totInc > 0 ? (net / totInc) * 100 : 0;
+            const grossProfit = totInc - totInsumos;
+            const marginGross = totInc > 0 ? (grossProfit / totInc) * 100 : 0;
 
             document.getElementById('mdpInc').innerText = `$${totInc.toLocaleString()}`;
             document.getElementById('mdpExp').innerText = `$${totExp.toLocaleString()}`;
             document.getElementById('mdpBal').innerText = `$${net.toLocaleString()}`;
-            document.getElementById('mdpMargin').innerText = `${margin.toFixed(1)}%`;
+            document.getElementById('mdpMargin').innerText = `${marginNet.toFixed(1)}%`;
+            const gEl = document.getElementById('mdpMarginGross');
+            if (gEl) gEl.innerText = `${marginGross.toFixed(1)}%`;
 
             document.getElementById('mdpInversionesTot').innerText = `$${totInv.toLocaleString()}`;
             const invListEl = document.getElementById('mdpInversionesList');
@@ -2017,6 +2191,63 @@
             SCHEMA = JSON.parse(JSON.stringify(SCHEMA_DEFAULT));
             ALIASES = {...ALIASES_DEFAULT};
             renderConfig();
+        }
+
+        /* --- EXPORT CSV --- */
+        function csvEscape(v) {
+            const s = String(v == null ? '' : v);
+            if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+            return s;
+        }
+
+        function exportCSV(scope) {
+            let txs = TRANSACTIONS.filter(t => t && t.d && t.t !== CONFIG_MARKER);
+            if (scope === 'month') {
+                const currentMonth = new Date().toISOString().slice(0, 7);
+                txs = txs.filter(t => t.d.substring(0, 7) === currentMonth);
+            }
+            txs.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
+
+            if (txs.length === 0) {
+                alert('No hay transacciones para exportar');
+                return;
+            }
+
+            const headers = ['Fecha', 'Tipo', 'Categoría', 'Subcategoría', 'Monto', 'Descripción', 'Forma de Pago'];
+            const rows = [headers.join(',')];
+            txs.forEach(t => {
+                rows.push([
+                    csvEscape(t.d),
+                    csvEscape(t.t),
+                    csvEscape(normalizeCat(t.c)),
+                    csvEscape(normalizeSub(t.s || '')),
+                    csvEscape(t.a),
+                    csvEscape(t.desc || ''),
+                    csvEscape(t.p || '')
+                ].join(','));
+            });
+
+            // BOM UTF-8 para que Excel en Windows respete acentos
+            const BOM = '\uFEFF';
+            const csv = BOM + rows.join('\r\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+
+            const filename = scope === 'month'
+                ? `finanzas_${new Date().toISOString().slice(0, 7)}.csv`
+                : `finanzas_historico_${new Date().toISOString().slice(0, 10)}.csv`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            const toast = document.getElementById('toast');
+            toast.innerText = `Descargado: ${txs.length} transacciones`;
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 2500);
         }
     </script>
 </body>
