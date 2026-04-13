@@ -895,6 +895,17 @@
         </div>
     </div>
 
+    <!-- MODAL: acciones por transacción (editar / eliminar) -->
+    <div id="txActionsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="txActionsTitle">
+        <div class="modal-sheet">
+            <div class="header">
+                <button class="neu-btn back-btn" onclick="closeTxActions()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
+                <div id="txActionsTitle" class="app-title">Transacción</div>
+            </div>
+            <div id="txActionsBody" style="flex:1; overflow-y:auto; padding:10px 5px;"></div>
+        </div>
+    </div>
+
     <script>
         // --- MODO DEMO (portafolio) ---
         // Para uso personal: editá API_URL y SCHEMA con tus datos reales
@@ -1690,6 +1701,233 @@
             } catch (e) { console.error('fetchSync error:', e); return false; }
         }
 
+        /* --- Editar / Eliminar transacciones (T3.1) --- */
+        function _txSignature(tx) {
+            return { d: tx.d, t: tx.t, c: tx.c, s: tx.s, a: tx.a, desc: tx.desc };
+        }
+
+        function _txIsPendingSync(tx) {
+            // Busca si la tx sigue en la cola de pending (no llegó al sheet todavía)
+            return PENDING_QUEUE.some(item => (item.txs || []).indexOf(tx) !== -1)
+                || OPTIMISTIC_TXS.indexOf(tx) !== -1;
+        }
+
+        function _rerenderActiveView() {
+            const act = document.querySelector('.app-view.active');
+            if (!act) return;
+            if (act.id === 'historyView') renderHistory(currentHistFilter);
+            if (act.id === 'trendsView') renderTrends();
+            if (act.id === 'marDePanView') renderMarDePan(currentMdpFilter);
+            if (act.id === 'hogarView') renderHogar(currentHogarFilter);
+            if (act.id === 'monthView' && window.currentContext?.monthKey) renderMonth(window.currentContext.monthKey);
+            if (act.id === 'breakdownView' && window.currentContext?.monthKey) renderBreakdown(window.currentContext.monthKey, window.currentContext.type);
+            if (act.id === 'subView' && window.currentContext?.monthKey) renderSubBreakdown(window.currentContext.monthKey, window.currentContext.type, window.currentContext.category);
+            // Si el histórico tiene búsqueda activa, refrescarla
+            const searchInput = document.getElementById('histSearch');
+            if (searchInput && searchInput.value && act.id === 'historyView') runSearch();
+        }
+
+        async function deleteTxFromSheet(tx) {
+            if (_txIsPendingSync(tx)) {
+                _toast('⏳ Esperá a que termine de sincronizar', true);
+                return false;
+            }
+            const idx = TRANSACTIONS.indexOf(tx);
+            if (idx === -1) return false;
+            const signature = _txSignature(tx);
+            TRANSACTIONS.splice(idx, 1);
+            processHistory();
+            if (!IS_DEMO) localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
+            _rerenderActiveView();
+
+            if (API_URL) {
+                try {
+                    await fetch(API_URL, {
+                        method: 'POST', mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'deleteTransaction',
+                            token: API_TOKEN,
+                            signature: signature
+                        })
+                    });
+                    // Reconciliar con el server para detectar si el match no existió
+                    setTimeout(() => fetchSync(), 1200);
+                } catch (e) {
+                    console.error('Delete sync error:', e);
+                }
+            }
+            return true;
+        }
+
+        async function updateTxFromSheet(tx, changes) {
+            if (_txIsPendingSync(tx)) {
+                _toast('⏳ Esperá a que termine de sincronizar', true);
+                return false;
+            }
+            const signature = _txSignature(tx);
+            // Aplicar cambios locales primero
+            Object.keys(changes).forEach(k => { tx[k] = changes[k]; });
+            processHistory();
+            if (!IS_DEMO) localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
+            _rerenderActiveView();
+
+            if (API_URL) {
+                try {
+                    await fetch(API_URL, {
+                        method: 'POST', mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'updateTransaction',
+                            token: API_TOKEN,
+                            signature: signature,
+                            changes: changes
+                        })
+                    });
+                    setTimeout(() => fetchSync(), 1200);
+                } catch (e) {
+                    console.error('Update sync error:', e);
+                }
+            }
+            return true;
+        }
+
+        function _toast(msg, isWarn) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            if (isWarn) t.style.color = 'var(--secondary)';
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 2800);
+        }
+
+        /* --- Modal: acciones por transacción --- */
+        let _txActionsCurrent = null; // referencia a la tx actualmente en el modal
+        let _txActionsMode = 'view';  // 'view' | 'edit'
+
+        function openTxActions(tx) {
+            _txActionsCurrent = tx;
+            _txActionsMode = 'view';
+            _renderTxActionsBody();
+            openModalA11y(document.getElementById('txActionsModal'));
+        }
+
+        function closeTxActions() {
+            closeModalA11y(document.getElementById('txActionsModal'));
+            _txActionsCurrent = null;
+            _txActionsMode = 'view';
+        }
+
+        function _renderTxActionsBody() {
+            const tx = _txActionsCurrent;
+            if (!tx) return;
+            const body = document.getElementById('txActionsBody');
+            const isInc = tx.t === 'Ingreso';
+            const amountColor = isInc ? 'var(--success)' : 'var(--secondary)';
+            const sign = isInc ? '+' : '-';
+
+            if (_txActionsMode === 'view') {
+                body.innerHTML = `
+                    <div class="neu-flat" style="padding:16px; border-radius:15px; margin-bottom:18px;">
+                        <div style="font-size:1.6rem; font-weight:700; color:${amountColor}; text-align:center; margin-bottom:10px;">
+                            ${sign}$${(tx.a || 0).toLocaleString()}
+                        </div>
+                        <div style="font-size:0.95rem; font-weight:600; text-align:center; margin-bottom:4px;">
+                            ${esc(normalizeCat(tx.c) || '?')}${tx.s ? ' · ' + esc(tx.s) : ''}
+                        </div>
+                        <div style="font-size:0.8rem; color:#5e5e5e; text-align:center;">
+                            ${esc(tx.d)}${tx.p ? ' · ' + esc(tx.p) : ''}
+                        </div>
+                        ${tx.desc ? `<div style="font-size:0.85rem; color:#444; text-align:center; margin-top:10px; font-style:italic;">"${esc(tx.desc)}"</div>` : ''}
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:12px; padding:0 5px;">
+                        <button class="big-btn btn-primary" onclick="_txActionsEditStart()" style="display:flex; align-items:center; justify-content:center; gap:10px;">
+                            <span aria-hidden="true">✏️</span> Editar
+                        </button>
+                        <button class="big-btn" onclick="_txActionsDeleteConfirm()" style="background:var(--secondary); color:#fff; display:flex; align-items:center; justify-content:center; gap:10px;">
+                            <span aria-hidden="true">🗑</span> Eliminar
+                        </button>
+                    </div>
+                `;
+            } else if (_txActionsMode === 'edit') {
+                body.innerHTML = `
+                    <div style="padding:5px;">
+                        <div style="margin-bottom:14px;">
+                            <label for="txEditAmount" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Monto</label>
+                            <input type="number" id="txEditAmount" class="neu-input" value="${Number(tx.a) || 0}" inputmode="decimal" step="any">
+                        </div>
+                        <div style="margin-bottom:14px;">
+                            <label for="txEditSub" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Subcategoría</label>
+                            <input type="text" id="txEditSub" class="neu-input" value="${esc(tx.s || '')}" spellcheck="false" autocomplete="off">
+                        </div>
+                        <div style="margin-bottom:14px;">
+                            <label for="txEditDesc" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Descripción</label>
+                            <input type="text" id="txEditDesc" class="neu-input" value="${esc(tx.desc || '')}" spellcheck="false" autocomplete="off">
+                        </div>
+                        <div style="margin-bottom:18px;">
+                            <label for="txEditDate" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Fecha</label>
+                            <input type="date" id="txEditDate" class="neu-input" value="${esc((tx.d || '').slice(0,10))}">
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <button class="big-btn neu-flat" onclick="_txActionsEditCancel()" style="flex:1;">Cancelar</button>
+                            <button class="big-btn btn-primary" onclick="_txActionsEditSave()" style="flex:1;">Guardar</button>
+                        </div>
+                    </div>
+                `;
+                setTimeout(() => document.getElementById('txEditAmount')?.focus(), 100);
+            }
+        }
+
+        function _txActionsEditStart() {
+            _txActionsMode = 'edit';
+            _renderTxActionsBody();
+        }
+
+        function _txActionsEditCancel() {
+            _txActionsMode = 'view';
+            _renderTxActionsBody();
+        }
+
+        async function _txActionsEditSave() {
+            const tx = _txActionsCurrent;
+            if (!tx) return;
+            const newAmount = Number(document.getElementById('txEditAmount').value);
+            const newSub = document.getElementById('txEditSub').value.trim();
+            const newDesc = document.getElementById('txEditDesc').value.trim();
+            const newDate = document.getElementById('txEditDate').value.trim();
+            if (!isFinite(newAmount) || newAmount < 0) {
+                _toast('Monto inválido', true);
+                return;
+            }
+            const changes = {};
+            if (newAmount !== tx.a) changes.a = newAmount;
+            if (newSub !== (tx.s || '')) changes.s = newSub;
+            if (newDesc !== (tx.desc || '')) changes.desc = newDesc;
+            if (newDate && newDate !== (tx.d || '').slice(0, 10)) changes.d = newDate;
+            if (Object.keys(changes).length === 0) {
+                _toast('Sin cambios');
+                closeTxActions();
+                return;
+            }
+            const ok = await updateTxFromSheet(tx, changes);
+            if (ok) {
+                _toast('✓ Actualizada');
+                closeTxActions();
+            }
+        }
+
+        async function _txActionsDeleteConfirm() {
+            const tx = _txActionsCurrent;
+            if (!tx) return;
+            const amtStr = '$' + (tx.a || 0).toLocaleString();
+            const label = `${normalizeCat(tx.c) || '?'}${tx.s ? ' · ' + tx.s : ''} — ${amtStr}`;
+            if (!confirm(`¿Eliminar esta transacción?\n\n${label}\n\nNo se puede deshacer.`)) return;
+            const ok = await deleteTxFromSheet(tx);
+            if (ok) {
+                _toast('🗑 Eliminada');
+                closeTxActions();
+            }
+        }
+
         /* --- Compartir config via QR --- */
         function shareConfig() {
             if (!API_URL) {
@@ -1799,6 +2037,7 @@
                 // Cada modal sabe cómo cerrarse
                 if (_modalCurrentEl.id === 'catModal') closeModal();
                 else if (_modalCurrentEl.id === 'qrModal') closeQrModal();
+                else if (_modalCurrentEl.id === 'txActionsModal') closeTxActions();
                 return;
             }
             if (e.key === 'Tab') {
@@ -2346,6 +2585,38 @@
                 div.innerHTML = `<div style="flex:1;"><div>${esc(s)}</div><div style="font-size:0.8rem;color:#5e5e5e;margin-top:5px;">${desc}</div></div><div class="row-right">$${a.toLocaleString()}</div>`;
                 list.appendChild(div);
             });
+
+            // Lista de transacciones individuales (editables)
+            if (txs.length > 0) {
+                const sep = document.createElement('div');
+                sep.style.cssText = 'margin-top:20px; margin-bottom:10px; font-size:0.75rem; color:#5e5e5e; text-transform:uppercase; letter-spacing:0.5px; padding:0 5px;';
+                sep.textContent = `Transacciones (${txs.length}) — tocá para editar o borrar`;
+                list.appendChild(sep);
+                const sortedTxs = txs.slice().sort((a, b) => (b.d || '').localeCompare(a.d || ''));
+                sortedTxs.forEach(t => {
+                    const row = document.createElement('div');
+                    row.className = 'list-row neu-flat';
+                    row.style.cursor = 'pointer';
+                    row.setAttribute('role', 'button');
+                    row.setAttribute('tabindex', '0');
+                    row.setAttribute('aria-label', `Editar transacción ${t.a}`);
+                    const isInc = t.t === 'Ingreso';
+                    const sign = isInc ? '+' : '-';
+                    const color = isInc ? 'var(--success)' : 'var(--secondary)';
+                    row.innerHTML = `
+                        <div style="flex:1; display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
+                            <div style="font-size:0.85rem; font-weight:600;">${esc(normalizeSub(t.s || 'General'))}</div>
+                            <div style="font-size:0.72rem; color:#5e5e5e;">${esc(t.d)}${t.desc ? ' — ' + esc(t.desc) : ''}</div>
+                        </div>
+                        <div class="row-right" style="color:${color};">${sign}$${(t.a || 0).toLocaleString()}</div>
+                    `;
+                    row.addEventListener('click', () => openTxActions(t));
+                    row.addEventListener('keydown', (ev) => {
+                        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openTxActions(t); }
+                    });
+                    list.appendChild(row);
+                });
+            }
             if (sChart) sChart.destroy();
             sChart = new Chart(document.getElementById('subChart'), {
                 type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
@@ -2424,6 +2695,10 @@
             matched.slice(0, 100).forEach(t => {
                 const row = document.createElement('div');
                 row.className = 'list-row neu-flat';
+                row.style.cursor = 'pointer';
+                row.setAttribute('role', 'button');
+                row.setAttribute('tabindex', '0');
+                row.setAttribute('aria-label', `Editar transacción ${(normalizeCat(t.c) || '')} ${t.a}`);
                 const isInc = t.t === 'Ingreso';
 
                 const left = document.createElement('div');
@@ -2443,6 +2718,13 @@
                 right.textContent = (isInc ? '+' : '-') + '$' + (t.a || 0).toLocaleString();
 
                 row.append(left, right);
+                row.addEventListener('click', () => openTxActions(t));
+                row.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                        ev.preventDefault();
+                        openTxActions(t);
+                    }
+                });
                 list.appendChild(row);
             });
             results.appendChild(list);
