@@ -1,4 +1,23 @@
 /**
+ * Finanzas V6.2 — Google Apps Script backend (v2.1)
+ *
+ * IMPORTANTE - SETEAR ANTES DE DESPLEGAR:
+ *   Generá un token random en https://www.uuidgenerator.net/ y pegalo en
+ *   SECRET_TOKEN. El frontend lo envía en cada request. Si el token no
+ *   coincide, el script rechaza la operación. Esto cierra el agujero de
+ *   "el link es la única llave".
+ *
+ * ROTACIÓN: si el link/QR leakea, generá un token nuevo, peguálo acá,
+ *   redeplegá, y actualizá el token en cada dispositivo desde la app.
+ */
+const SECRET_TOKEN = 'CAMBIAR-POR-UN-TOKEN-RANDOM-DE-32-CHARS';
+
+const VALID_TYPES = ['Ingreso', 'Egreso', '__CONFIG__'];
+const MAX_BATCH = 50;
+const MAX_AMOUNT = 100000000; // 100 millones, sanity check
+const MAX_DESC_LEN = 500;
+
+/**
  * Finanzas V6.2 — Google Apps Script backend (v2)
  *
  * Instrucciones de instalación (se hace UNA sola vez):
@@ -103,15 +122,23 @@ function getRawData() {
 /* ---------- Write ---------- */
 
 function appendRow_(sheet, body) {
+  // Validaciones de seguridad
+  const type = String(body.type || '');
+  if (!VALID_TYPES.includes(type)) throw new Error('Tipo inválido: ' + type);
+  const amount = Number(body.amount);
+  if (!isFinite(amount) || amount < 0 || amount > MAX_AMOUNT) {
+    throw new Error('Monto inválido: ' + body.amount);
+  }
+  const desc = String(body.description || '').slice(0, MAX_DESC_LEN);
   const dateStr = formatDate_(body.date || new Date().toISOString());
   sheet.appendRow([
     dateStr,
-    body.type || '',
-    body.category || '',
-    body.subcategory || '',
-    Number(body.amount) || 0,
-    body.description || '',
-    body.paymentMethod || body.p || ''
+    type,
+    String(body.category || '').slice(0, 100),
+    String(body.subcategory || '').slice(0, 100),
+    amount,
+    desc,
+    String(body.paymentMethod || body.p || '').slice(0, 50)
   ]);
 }
 
@@ -167,6 +194,26 @@ function updateTransaction(sig, changes) {
   if (changes.desc !== undefined) sheet.getRange(rowNum, 6).setValue(changes.desc);
   if (changes.p !== undefined) sheet.getRange(rowNum, 7).setValue(changes.p);
   return 1;
+}
+
+/* ---------- Auth ---------- */
+
+function checkAuth_(e) {
+  // El token puede venir por query (GET) o en el body JSON (POST)
+  let token = '';
+  if (e && e.parameter && e.parameter.token) token = e.parameter.token;
+  if (e && e.postData && e.postData.contents) {
+    try {
+      const body = JSON.parse(e.postData.contents);
+      if (body && body.token) token = body.token;
+    } catch (err) {}
+  }
+  if (!SECRET_TOKEN || SECRET_TOKEN === 'CAMBIAR-POR-UN-TOKEN-RANDOM-DE-32-CHARS') {
+    // Token no configurado: permitir (modo migración)
+    return true;
+  }
+  if (token !== SECRET_TOKEN) throw new Error('Unauthorized');
+  return true;
 }
 
 /* ---------- Mantenimiento (correr a mano desde el editor) ---------- */
@@ -229,6 +276,11 @@ function normalizeDateColumn() {
 /* ---------- Entrypoints ---------- */
 
 function doGet(e) {
+  try {
+    checkAuth_(e);
+  } catch (err) {
+    return jsonResponse({ error: 'Unauthorized' });
+  }
   const action = (e && e.parameter && e.parameter.action) || '';
   if (action === 'getRawData') {
     return jsonResponse(getRawData());
@@ -238,6 +290,7 @@ function doGet(e) {
 
 function doPost(e) {
   try {
+    checkAuth_(e);
     const body = JSON.parse(e.postData.contents);
     const action = body.action;
     if (action === 'addTransaction') {
@@ -245,14 +298,19 @@ function doPost(e) {
       return jsonResponse({ ok: true });
     }
     if (action === 'addTransactions' && Array.isArray(body.txs)) {
+      if (body.txs.length > MAX_BATCH) {
+        return jsonResponse({ error: 'Batch too large (max ' + MAX_BATCH + ')' });
+      }
       addTransactions(body.txs);
       return jsonResponse({ ok: true, count: body.txs.length });
     }
     if (action === 'deleteTransaction') {
+      Logger.log('DELETE request: ' + JSON.stringify(body.signature || {}));
       const n = deleteTransaction(body.signature || {});
       return jsonResponse({ ok: true, deleted: n });
     }
     if (action === 'updateTransaction') {
+      Logger.log('UPDATE request: ' + JSON.stringify(body.signature || {}));
       const n = updateTransaction(body.signature || {}, body.changes || {});
       return jsonResponse({ ok: true, updated: n });
     }

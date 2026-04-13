@@ -592,7 +592,7 @@
                 onclick="renderHistory('mdp')" id="bizFilterBtn">Mar de Pan</button>
         </div>
         <label for="histSearch" class="visually-hidden">Buscar transacciones</label>
-        <div id="historyInsights" class="insight-bar empty"></div>
+        <div id="historyInsights" class="insight-bar empty" role="status" aria-live="polite" aria-atomic="true"></div>
         <input type="text" id="histSearch" class="neu-input" placeholder="🔍 Buscar: Amadeo, Nafta, Sueldos..."
             style="margin-bottom:15px;" spellcheck="false" autocomplete="off" oninput="runSearch()">
         <div id="searchResults" style="display:none;"></div>
@@ -647,7 +647,7 @@
             <div class="app-title" id="bizViewTitle">Mar de Pan</div>
         </div>
 
-        <div id="mdpInsights" class="insight-bar empty"></div>
+        <div id="mdpInsights" class="insight-bar empty" role="status" aria-live="polite" aria-atomic="true"></div>
 
         <div class="summary-card neu-flat">
             <div class="stat-item">
@@ -709,7 +709,7 @@
             <div class="app-title">Hogar</div>
         </div>
 
-        <div id="hogarInsights" class="insight-bar empty"></div>
+        <div id="hogarInsights" class="insight-bar empty" role="status" aria-live="polite" aria-atomic="true"></div>
 
         <div class="summary-card neu-flat">
             <div class="stat-item">
@@ -765,14 +765,14 @@
         </div>
 
         <!-- Modal QR (se abre desde shareConfig) -->
-        <div id="qrModal" class="modal-overlay" style="justify-content:center; align-items:center;">
+        <div id="qrModal" class="modal-overlay" style="justify-content:center; align-items:center;" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
             <div class="modal-sheet" style="height:auto; max-width:90%; border-radius:30px; padding:30px; text-align:center;">
                 <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
                     <button class="neu-btn back-btn" onclick="closeQrModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
                 </div>
-                <h3 style="color:#555; margin-bottom:10px;">Escanear desde otro dispositivo</h3>
+                <h3 id="qrModalTitle" style="color:#555; margin-bottom:10px;">Escanear desde otro dispositivo</h3>
                 <div style="font-size:0.85rem; color:#5e5e5e; margin-bottom:20px;">Abrí la cámara en el otro teléfono o tablet y apuntá al código. Se va a configurar automáticamente y quedar listo para usar.</div>
-                <div id="qrContainer" style="display:flex; justify-content:center; padding:20px; background:white; border-radius:20px; margin-bottom:15px;"></div>
+                <div id="qrContainer" style="display:flex; justify-content:center; padding:20px; background:white; border-radius:20px; margin-bottom:15px;" role="img" aria-label="Código QR con enlace de configuración"></div>
                 <div style="font-size:0.75rem; color:#6b6b6b;">⚠️ No compartas este código con nadie fuera de tu familia: quien lo escanee queda con acceso de lectura y escritura a tu planilla.</div>
             </div>
         </div>
@@ -789,6 +789,11 @@
         <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "Alimentacion" → "Alimentación".</div>
         <div id="cfgAliasList" class="list-container" style="padding-bottom:10px;"></div>
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addAlias()">+ Agregar alias</button>
+
+        <h3 id="cfgTagsHeader" style="color:#555; margin-bottom:10px;">🏷️ Tags personales <span style="font-size:0.7rem; color:#5e5e5e; font-weight:normal;">(solo este dispositivo)</span></h3>
+        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Etiquetas para agrupar transacciones por palabras clave del histórico (subcategoría o descripción). Ej: tag "el peque" con patrón "Amadeo" suma todo lo gastado en el nene. <strong>Estos tags NO se sincronizan al spreadsheet ni al deploy público</strong>.</div>
+        <div id="cfgTagsList" class="list-container" style="padding-bottom:10px;"></div>
+        <button id="cfgTagsAddBtn" class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addPersonalTag()">+ Agregar tag personal</button>
 
         <div style="display:flex; gap:10px; margin-bottom:15px;">
             <button class="big-btn btn-primary" style="flex:1;" onclick="saveConfig()">💾 Guardar y sincronizar</button>
@@ -867,7 +872,7 @@
     </div>
 
     <!-- MODAL -->
-    <div id="catModal" class="modal-overlay">
+    <div id="catModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-sheet">
             <div class="header"><button class="neu-btn back-btn" onclick="closeModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
                 <div id="modalTitle" class="app-title">Seleccionar</div>
@@ -879,17 +884,30 @@
     <script>
         // --- MODO DEMO (portafolio) ---
         // Para uso personal: editá API_URL y SCHEMA con tus datos reales
-        // Onboarding multi-dispositivo: si la URL tiene ?api=..., la guardamos
-        // en localStorage y limpiamos el param de la barra de direcciones.
-        // Así un link del tipo .../?api=URL configura el dispositivo en 1 tap.
+        // Onboarding multi-dispositivo: si la URL tiene ?api=... (o ?api= y ?token=),
+        // los guardamos en localStorage y limpiamos los params.
+        // Validación anti-phishing: solo acepta dominios script.google.com.
         (function handleApiFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const apiParam = params.get('api');
+            const tokenParam = params.get('token');
             if (apiParam && apiParam.trim()) {
-                localStorage.setItem('FINANZAS_API_URL', apiParam.trim());
-                localStorage.removeItem('FINANZAS_CACHE');
-                // Limpiar el query param de la URL sin recargar
-                params.delete('api');
+                // Validar que sea un dominio confiable (Google Apps Script)
+                let safe = false;
+                try {
+                    const u = new URL(apiParam.trim());
+                    safe = u.protocol === 'https:' && u.hostname === 'script.google.com';
+                } catch (e) { safe = false; }
+                if (safe) {
+                    localStorage.setItem('FINANZAS_API_URL', apiParam.trim());
+                    if (tokenParam) localStorage.setItem('FINANZAS_API_TOKEN', tokenParam.trim());
+                    localStorage.removeItem('FINANZAS_CACHE');
+                } else {
+                    console.warn('API URL rechazada por seguridad:', apiParam);
+                    alert('La URL del parámetro ?api= no es de script.google.com y fue rechazada por seguridad.');
+                }
+                // Limpiar los query params de la URL sin recargar
+                params.delete('api'); params.delete('token');
                 const clean = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
                 window.history.replaceState({}, document.title, clean);
             }
@@ -898,6 +916,7 @@
         // API_URL: si hay una guardada en localStorage la usa (uso personal);
         // si no, queda vacía (modo demo para portafolio en GitHub Pages)
         const API_URL = localStorage.getItem('FINANZAS_API_URL') || '';
+        const API_TOKEN = localStorage.getItem('FINANZAS_API_TOKEN') || '';
         const IS_DEMO = !API_URL;
 
         // Anonimización del modo demo: el negocio aparece como "Emprendimiento"
@@ -948,6 +967,34 @@
             'MarDePan': 'Mar de Pan',
             'Alimentacion': 'Alimentación'
         };
+
+        // Tags personales: lista de strings (subcategorías o palabras clave en desc)
+        // que el usuario quiere agrupar bajo un nombre amigable. Se guarda solo en
+        // localStorage del usuario, NUNCA va al sheet ni al repo público.
+        // Estructura: [{ label: 'el peque', patterns: ['Amadeo'] }, ...]
+        let PERSONAL_TAGS = IS_DEMO ? [] : (() => {
+            try { return JSON.parse(localStorage.getItem('FINANZAS_PERSONAL_TAGS') || '[]'); }
+            catch { return []; }
+        })();
+        function savePersonalTags() {
+            localStorage.setItem('FINANZAS_PERSONAL_TAGS', JSON.stringify(PERSONAL_TAGS));
+        }
+        // Devuelve true si una transacción matchea algún patrón del tag dado
+        function txMatchesTag(t, tag) {
+            if (!tag || !tag.patterns || !tag.patterns.length) return false;
+            const haystack = `${t.s || ''} ${t.desc || ''}`.toLowerCase();
+            return tag.patterns.some(p => haystack.includes(String(p).toLowerCase()));
+        }
+        // Suma de gastos del mes que matchean un tag
+        function tagMonthExpense(tag, monthKey) {
+            const d = HISTORY_MAP[monthKey];
+            if (!d) return 0;
+            let s = 0;
+            d.txs.forEach(t => {
+                if (t.t === 'Egreso' && txMatchesTag(t, tag)) s += (Number(t.a) || 0);
+            });
+            return s;
+        }
 
         // Carga el schema y aliases.
         // - En modo demo, SIEMPRE uso el schema anónimo (ignoro cache para
@@ -1274,7 +1321,8 @@
             openModal(type);
         }
         function openModal(type) {
-            document.getElementById('catModal').classList.add('open');
+            const m = document.getElementById('catModal');
+            openModalA11y(m);
             document.getElementById('modalTitle').innerText = `Elegir ${type}`;
             const list = document.getElementById('catList'); list.innerHTML = '';
             Object.keys(SCHEMA[type]).forEach(c => {
@@ -1296,7 +1344,7 @@
                 });
             } else confirmTx('');
         }
-        function closeModal() { document.getElementById('catModal').classList.remove('open'); }
+        function closeModal() { closeModalA11y(document.getElementById('catModal')); }
         function confirmTx(sub) {
             currentTx.subcategory = sub; closeModal();
             document.getElementById('homeView').classList.remove('active');
@@ -1394,6 +1442,8 @@
         // Cola de intents de POST que están pendientes de sincronizar
         let PENDING_QUEUE = JSON.parse(localStorage.getItem('FINANZAS_PENDING') || '[]');
         let PENDING_SYNC = 0;
+        let SYNC_RUNNING = false; // mutex para evitar reentrancia
+        let SYNC_PENDING_TRIGGER = false; // si llaman mientras corre, marcar para procesar después
 
         function savePendingQueue() {
             localStorage.setItem('FINANZAS_PENDING', JSON.stringify(PENDING_QUEUE));
@@ -1425,19 +1475,55 @@
 
         async function processPendingQueue() {
             if (!API_URL) return;
+            // Mutex: si ya hay otra ejecución, marcar y salir
+            if (SYNC_RUNNING) { SYNC_PENDING_TRIGGER = true; return; }
+            SYNC_RUNNING = true;
+            try { await _processPendingQueueInner(); }
+            finally {
+                SYNC_RUNNING = false;
+                // Si llegaron triggers durante la ejecución, reprocesar
+                if (SYNC_PENDING_TRIGGER) {
+                    SYNC_PENDING_TRIGGER = false;
+                    setTimeout(() => processPendingQueue(), 0);
+                }
+            }
+        }
+
+        async function _processPendingQueueInner() {
             while (PENDING_QUEUE.length > 0) {
                 const item = PENDING_QUEUE[0];
                 PENDING_SYNC++;
                 updatePendingIndicator();
                 try {
-                    // Enviar cada tx del batch individualmente como addTransaction.
-                    // Esto garantiza compatibilidad con el Apps Script viejo y nuevo.
-                    for (const tx of item.txs) {
+                    // Si el batch tiene 2+ tx (transferencia dual), usar addTransactions
+                    // (atómico en el Apps Script v2). Si tiene 1, usar addTransaction
+                    // singular (compatible con script viejo también).
+                    if (item.txs.length >= 2) {
+                        await fetch(API_URL, {
+                            method: 'POST', mode: 'no-cors',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'addTransactions',
+                                token: API_TOKEN,
+                                txs: item.txs.map(tx => ({
+                                    date: tx.d,
+                                    type: tx.t,
+                                    category: tx.c,
+                                    subcategory: tx.s,
+                                    amount: tx.a,
+                                    description: tx.desc,
+                                    paymentMethod: tx.p || ''
+                                }))
+                            })
+                        });
+                    } else {
+                        const tx = item.txs[0];
                         await fetch(API_URL, {
                             method: 'POST', mode: 'no-cors',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 action: 'addTransaction',
+                                token: API_TOKEN,
                                 date: tx.d,
                                 type: tx.t,
                                 category: tx.c,
@@ -1544,6 +1630,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'addTransaction',
+                    token: API_TOKEN,
                     date: new Date().toISOString(),
                     type: CONFIG_MARKER,
                     category: kind, // 'schema' o 'aliases'
@@ -1558,7 +1645,8 @@
         async function fetchSync() {
             if (!API_URL) return false;
             try {
-                const res = await fetch(`${API_URL}?action=getRawData`);
+                const tokenQs = API_TOKEN ? `&token=${encodeURIComponent(API_TOKEN)}` : '';
+                const res = await fetch(`${API_URL}?action=getRawData${tokenQs}`);
                 const raw = await res.json();
                 // Extraer configuración y separar transacciones reales
                 const cleanTxs = extractConfig(raw);
@@ -1594,8 +1682,9 @@
                 alert('Primero configurá una API URL en este dispositivo.');
                 return;
             }
-            // Armar el link con query param para onboarding 1-tap
-            const link = `${window.location.origin}${window.location.pathname}?api=${encodeURIComponent(API_URL)}`;
+            // Armar el link con query param para onboarding 1-tap (incluye token si existe)
+            const tokenPart = API_TOKEN ? `&token=${encodeURIComponent(API_TOKEN)}` : '';
+            const link = `${window.location.origin}${window.location.pathname}?api=${encodeURIComponent(API_URL)}${tokenPart}`;
             const container = document.getElementById('qrContainer');
             container.innerHTML = '';
             try {
@@ -1616,29 +1705,37 @@
                 container.innerHTML = '<div style="color:var(--secondary)">No se pudo generar el código. Verificá tu conexión.</div>';
                 console.error(e);
             }
-            document.getElementById('qrModal').classList.add('open');
+            openModalA11y(document.getElementById('qrModal'));
         }
 
         function closeQrModal() {
-            document.getElementById('qrModal').classList.remove('open');
+            closeModalA11y(document.getElementById('qrModal'));
         }
 
         function configureApi() {
-            const current = localStorage.getItem('FINANZAS_API_URL') || '';
-            const msg = current
-                ? `API_URL actual:\n${current}\n\nPegá una nueva URL o dejá vacío para volver al modo demo:`
+            const currentUrl = localStorage.getItem('FINANZAS_API_URL') || '';
+            const currentTok = localStorage.getItem('FINANZAS_API_TOKEN') || '';
+            const msg = currentUrl
+                ? `API_URL actual:\n${currentUrl}\n\nPegá una nueva URL o dejá vacío para volver al modo demo:`
                 : 'Pegá la URL de tu Google Apps Script (o dejá vacío para cancelar):';
-            const input = prompt(msg, current);
-            if (input === null) return; // canceló
+            const input = prompt(msg, currentUrl);
+            if (input === null) return;
             if (input.trim() === '') {
                 localStorage.removeItem('FINANZAS_API_URL');
+                localStorage.removeItem('FINANZAS_API_TOKEN');
                 localStorage.removeItem('FINANZAS_CACHE');
                 alert('Modo demo activado. Recargando...');
-            } else {
-                localStorage.setItem('FINANZAS_API_URL', input.trim());
-                localStorage.removeItem('FINANZAS_CACHE');
-                alert('API_URL guardada. Recargando...');
+                location.reload();
+                return;
             }
+            // Pedir token también
+            const tok = prompt('Token de seguridad (opcional pero recomendado, debe coincidir con el SECRET_TOKEN del Apps Script):', currentTok);
+            if (tok === null) return; // canceló
+            localStorage.setItem('FINANZAS_API_URL', input.trim());
+            if (tok.trim()) localStorage.setItem('FINANZAS_API_TOKEN', tok.trim());
+            else localStorage.removeItem('FINANZAS_API_TOKEN');
+            localStorage.removeItem('FINANZAS_CACHE');
+            alert('API_URL guardada. Recargando...');
             location.reload();
         }
 
@@ -1654,6 +1751,57 @@
             t.style.display = 'block';
             setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 3000);
         }
+
+        /* --- Modal helpers: focus trap, Escape, retorno de foco --- */
+        // Track del último botón que abrió un modal para devolverle el foco al cerrar
+        let _modalLastFocus = null;
+        let _modalCurrentEl = null;
+
+        function openModalA11y(modalEl, lastFocusEl) {
+            _modalLastFocus = lastFocusEl || document.activeElement;
+            _modalCurrentEl = modalEl;
+            modalEl.classList.add('open');
+            // Foco al primer elemento focuseable
+            setTimeout(() => {
+                const focusables = modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                if (focusables.length) focusables[0].focus();
+            }, 100);
+        }
+
+        function closeModalA11y(modalEl) {
+            modalEl.classList.remove('open');
+            _modalCurrentEl = null;
+            if (_modalLastFocus && _modalLastFocus.focus) {
+                _modalLastFocus.focus();
+                _modalLastFocus = null;
+            }
+        }
+
+        // Listener global: Escape cierra el modal abierto, Tab queda atrapado dentro
+        document.addEventListener('keydown', (e) => {
+            if (!_modalCurrentEl) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                // Cada modal sabe cómo cerrarse
+                if (_modalCurrentEl.id === 'catModal') closeModal();
+                else if (_modalCurrentEl.id === 'qrModal') closeQrModal();
+                return;
+            }
+            if (e.key === 'Tab') {
+                // Focus trap
+                const focusables = Array.from(_modalCurrentEl.querySelectorAll(
+                    'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
+                )).filter(el => el.offsetParent !== null);
+                if (!focusables.length) return;
+                const first = focusables[0];
+                const last = focusables[focusables.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault(); last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault(); first.focus();
+                }
+            }
+        });
 
         // Soporte de teclado físico (numpad incluido) en la vista Home
         document.addEventListener('keydown', (e) => {
@@ -2305,6 +2453,7 @@
             renderCategoryList('Egreso', 'cfgEgresoList');
             renderCategoryList('Ingreso', 'cfgIngresoList');
             renderAliasList();
+            renderPersonalTagsList();
         }
 
         function renderCategoryList(type, containerId) {
@@ -2446,6 +2595,74 @@
             renderConfig();
         }
 
+        /* --- Tags personales (LOCAL ONLY, no van al sheet ni al repo público) --- */
+        function renderPersonalTagsList() {
+            const list = document.getElementById('cfgTagsList');
+            if (!list) return;
+            list.innerHTML = '';
+            // En modo demo, ocultar toda la sección
+            const header = document.getElementById('cfgTagsHeader');
+            const addBtn = document.getElementById('cfgTagsAddBtn');
+            if (IS_DEMO) {
+                if (header) header.style.display = 'none';
+                if (addBtn) addBtn.style.display = 'none';
+                list.style.display = 'none';
+                return;
+            }
+            if (PERSONAL_TAGS.length === 0) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'color:#6b6b6b; font-size:0.85rem; text-align:center; padding:10px;';
+                empty.textContent = 'Sin tags personales';
+                list.appendChild(empty);
+                return;
+            }
+            PERSONAL_TAGS.forEach((tag, idx) => {
+                const row = document.createElement('div');
+                row.className = 'list-row neu-flat';
+                row.style.flexDirection = 'column';
+                row.style.alignItems = 'stretch';
+                const top = document.createElement('div');
+                top.style.cssText = 'display:flex; justify-content:space-between; align-items:center; width:100%;';
+                const labelEl = document.createElement('div');
+                labelEl.style.fontWeight = '600';
+                labelEl.textContent = tag.label;
+                const btnDel = document.createElement('button');
+                btnDel.className = 'neu-flat';
+                btnDel.style.cssText = 'padding:6px 12px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
+                btnDel.textContent = 'Eliminar';
+                btnDel.setAttribute('aria-label', 'Eliminar tag ' + tag.label);
+                btnDel.onclick = () => deletePersonalTag(idx);
+                top.append(labelEl, btnDel);
+                row.appendChild(top);
+                const patterns = document.createElement('div');
+                patterns.style.cssText = 'font-size:0.8rem; color:#5e5e5e; margin-top:8px;';
+                patterns.textContent = 'Patrones: ' + tag.patterns.join(', ');
+                row.appendChild(patterns);
+                list.appendChild(row);
+            });
+        }
+
+        function addPersonalTag() {
+            const label = prompt('Nombre amigable del tag (solo lo verás vos en este dispositivo):');
+            if (!label || !label.trim()) return;
+            const patternsStr = prompt(`Patrones a buscar (separados por coma). La app va a sumar las transacciones cuya subcategoría o descripción contengan alguno de estos patrones.\n\nEj: "Amadeo, Ama, escuela Ama"`);
+            if (patternsStr === null) return;
+            const patterns = patternsStr.split(',').map(s => s.trim()).filter(Boolean);
+            if (!patterns.length) { alert('Necesitás al menos un patrón'); return; }
+            PERSONAL_TAGS.push({ label: label.trim(), patterns });
+            savePersonalTags();
+            renderPersonalTagsList();
+        }
+
+        function deletePersonalTag(idx) {
+            const tag = PERSONAL_TAGS[idx];
+            if (!tag) return;
+            if (!confirm(`¿Eliminar el tag "${tag.label}"?`)) return;
+            PERSONAL_TAGS.splice(idx, 1);
+            savePersonalTags();
+            renderPersonalTagsList();
+        }
+
         function addAlias() {
             const oldName = prompt('Nombre viejo (como aparece en el histórico):');
             if (!oldName || !oldName.trim()) return;
@@ -2562,8 +2779,12 @@
                     const isMdp = isMdpTx(t);
                     if (scope === 'mdp' && !isMdp) return;
                     if (scope === 'hogar' && isMdp) return;
-                    if (t.t === 'Ingreso') inc += (Number(t.a) || 0);
-                    else if (t.t === 'Egreso') {
+                    if (t.t === 'Ingreso') {
+                        // Las extracciones del lado hogar son transferencias internas,
+                        // no ingreso real del hogar. Excluir cuando el scope es hogar.
+                        if (scope === 'hogar' && isExtractionInc(t)) return;
+                        inc += (Number(t.a) || 0);
+                    } else if (t.t === 'Egreso') {
                         // Excluir extracciones del egreso operativo de MdP
                         if (scope === 'mdp' && isExtractionExp(t)) return;
                         exp += (Number(t.a) || 0);
@@ -2581,15 +2802,142 @@
                     const monthsCovered = reserve / avgExp;
                     const target = avgExp * RESERVE_TARGET_MONTHS;
                     if (reserve <= 0) {
-                        insights.push({ icon: '🚨', tone: 'bad', text: `Tu fondo de reserva es negativo. Estás operando con plata que no tenés.` });
+                        insights.push({ icon: '🫂', tone: 'bad', text: `Tu reserva está en rojo. Mes difícil pero estás a tiempo de ordenar.` });
                     } else if (monthsCovered < 1) {
-                        insights.push({ icon: '🔴', tone: 'bad', text: `Alerta: tu reserva (${fmtMoney(reserve)}) cubre menos de 1 mes de gastos. Estás tocando el colchón.` });
+                        insights.push({ icon: '🔴', tone: 'bad', text: `Tu reserva (${fmtMoney(reserve)}) cubre menos de 1 mes. Cuidado con el colchón.` });
                     } else if (reserve < target) {
-                        insights.push({ icon: '🟡', tone: 'warn', text: `Tu reserva cubre ${monthsCovered.toFixed(1)} meses. Debajo del objetivo de ${RESERVE_TARGET_MONTHS} meses (${fmtMoney(target)}).` });
+                        insights.push({ icon: '🟡', tone: 'warn', text: `Tu reserva cubre ${monthsCovered.toFixed(1)} meses. Vamos creciendo hacia el objetivo de ${RESERVE_TARGET_MONTHS} meses.` });
                     } else {
                         insights.push({ icon: '💪', tone: 'good', text: `Tu fondo de reserva está sólido: ${fmtMoney(reserve)} cubre ${monthsCovered.toFixed(1)} meses de gastos.` });
                     }
                 }
+            }
+
+            // === LAU #2: días que quedan en el mes (solo si es mes en curso) ===
+            if ((view === 'home' || view === 'history' || view === 'hogar') && isCurrentMonth) {
+                const daysLeft = daysInMonth - dayOfMonth;
+                if (daysLeft > 0 && daysLeft <= 25) {
+                    insights.push({ icon: '📅', tone: 'info', text: `Hoy es ${dayOfMonth}. Quedan ${daysLeft} días para fin de mes.` });
+                }
+            }
+
+            // === LAU #5: primer mes con reserva positiva (celebración de hito) ===
+            if (view === 'history' || view === 'home') {
+                const reserveNow = _hogarReserve();
+                if (reserveNow > 0 && closedMonths.length >= 2) {
+                    // Calcular el balance acumulado mes a mes hasta encontrar el primer cruce a positivo
+                    let acc = 0;
+                    let firstPositive = null;
+                    for (const mk of months) {
+                        const tot = monthTotals(mk, 'hogar');
+                        acc += tot.inc - tot.exp;
+                        if (acc > 0 && !firstPositive) { firstPositive = mk; break; }
+                    }
+                    if (firstPositive && firstPositive === lastClosedMonth) {
+                        insights.push({ icon: '🎉', tone: 'good', text: `${monthName(firstPositive)} fue el primer mes con reserva positiva. Pequeño gran logro.` });
+                    }
+                }
+            }
+
+            // === LAU #8: días sin cargar ninguna tx (recordatorio suave) ===
+            if (view === 'home' || view === 'history') {
+                if (TRANSACTIONS.length > 0) {
+                    const sortedDates = TRANSACTIONS.map(t => parseDate(t.d)).filter(Boolean).sort();
+                    const lastTxDate = sortedDates[sortedDates.length - 1];
+                    if (lastTxDate) {
+                        const lastDate = new Date(lastTxDate);
+                        const diffDays = Math.floor((today - lastDate) / (1000 * 60 * 60 * 24));
+                        if (diffDays >= 4 && diffDays <= 30) {
+                            insights.push({ icon: '📲', tone: 'info', text: `Hace ${diffDays} días que no cargás movimientos. ¿Querés ponerte al día?` });
+                        }
+                    }
+                }
+            }
+
+            // === LAU #9: reparto Hogar vs MdP (% del flujo del mes) ===
+            if ((view === 'home' || view === 'history') && lastMonth) {
+                const hogTot = monthTotals(lastMonth, 'hogar');
+                const mdpTot = monthTotals(lastMonth, 'mdp');
+                const totalIngresos = hogTot.inc + mdpTot.inc;
+                if (totalIngresos > 0 && hogTot.exp + mdpTot.exp > 0) {
+                    const totalGasto = hogTot.exp + mdpTot.exp;
+                    const hogarPct = (hogTot.exp / totalGasto * 100).toFixed(0);
+                    const mdpPct = (mdpTot.exp / totalGasto * 100).toFixed(0);
+                    insights.push({ icon: '🏡', tone: 'info', text: `Este mes el hogar usó el ${hogarPct}% de los gastos, MdP el ${mdpPct}%.` });
+                }
+            }
+
+            // === LAU #11: ritmo de gasto vs días transcurridos (mes en curso, scope hogar) ===
+            if (view === 'hogar' && isCurrentMonth && monthProgress > 0.2 && monthProgress < 0.95) {
+                const cur = monthTotals(lastMonth, 'hogar');
+                const avgExp = _avgMonthlyHogarExp();
+                if (avgExp > 0 && cur.exp > 0) {
+                    const expectedPct = monthProgress * 100;
+                    const actualPct = cur.exp / avgExp * 100;
+                    if (actualPct > expectedPct + 15) {
+                        insights.push({ icon: '⏳', tone: 'warn', text: `Vas por el ${expectedPct.toFixed(0)}% del mes pero ya gastaste el ${actualPct.toFixed(0)}% del promedio. Aflojá un toque los próximos días.` });
+                    }
+                }
+            }
+
+            // === LAU #4: categoría Hogar que viene creciendo 3 meses ===
+            if ((view === 'history' || view === 'hogar') && closedMonths.length >= 3) {
+                const last3 = closedMonths.slice(-3);
+                const catTotals = {}; // {category: [m1, m2, m3]}
+                last3.forEach((mk, idx) => {
+                    HISTORY_MAP[mk].txs.forEach(t => {
+                        if (t.t !== 'Egreso' || isMdpTx(t)) return;
+                        const c = normalizeCat(t.c || 'Otros');
+                        if (!catTotals[c]) catTotals[c] = [0, 0, 0];
+                        catTotals[c][idx] += (Number(t.a) || 0);
+                    });
+                });
+                Object.entries(catTotals).forEach(([cat, vals]) => {
+                    if (vals[0] > 0 && vals[1] > vals[0] * 1.15 && vals[2] > vals[1] * 1.15) {
+                        const change = (vals[2] / vals[0] - 1) * 100;
+                        insights.push({ icon: '🔄', tone: 'warn', text: `La categoría "${cat}" viene creciendo 3 meses seguidos (+${change.toFixed(0)}%). ¿Subieron los precios?` });
+                    }
+                });
+            }
+
+            // === LAU #10: ahorro acumulado del año en curso ===
+            if (view === 'home' || view === 'history') {
+                const currentYear = today.getFullYear();
+                let yearInc = 0, yearExp = 0;
+                TRANSACTIONS.forEach(t => {
+                    const iso = parseDate(t.d);
+                    if (!iso || !iso.startsWith(String(currentYear))) return;
+                    if (isMdpTx(t)) return; // solo hogar
+                    if (isExtractionInc(t)) return; // no contar transferencias
+                    if (t.t === 'Ingreso') yearInc += (Number(t.a) || 0);
+                    else if (t.t === 'Egreso') yearExp += (Number(t.a) || 0);
+                });
+                const yearBal = yearInc - yearExp;
+                if (yearInc > 0 && yearBal > 0) {
+                    const monthsSoFar = today.getMonth() + 1;
+                    const ratePerMonth = yearBal / monthsSoFar;
+                    insights.push({ icon: '💰', tone: 'good', text: `En lo que va de ${currentYear} llevás ahorrado ${fmtMoney(yearBal)}. Ritmo de ${fmtMoney(ratePerMonth)} por mes.` });
+                }
+            }
+
+            // === Tags personales: insights por cada tag configurado ===
+            if (!IS_DEMO && PERSONAL_TAGS.length > 0 && (view === 'home' || view === 'history' || view === 'hogar')) {
+                PERSONAL_TAGS.forEach(tag => {
+                    const curMonthTotal = tagMonthExpense(tag, lastMonth);
+                    if (curMonthTotal > 0) {
+                        // Comparar con el mes anterior si es mes en curso
+                        if (isCurrentMonth && lastClosedMonth) {
+                            const prevTotal = tagMonthExpense(tag, lastClosedMonth);
+                            if (prevTotal > 0) {
+                                insights.push({ icon: '🏷️', tone: 'info', text: `Llevás ${fmtMoney(curMonthTotal)} en "${tag.label}" este mes. El mes pasado a esta altura ibas en ${fmtMoney(prevTotal * monthProgress)}.` });
+                            } else {
+                                insights.push({ icon: '🏷️', tone: 'info', text: `Llevás ${fmtMoney(curMonthTotal)} en "${tag.label}" este mes.` });
+                            }
+                        } else {
+                            insights.push({ icon: '🏷️', tone: 'info', text: `${monthName(lastMonth)}: ${fmtMoney(curMonthTotal)} en "${tag.label}".` });
+                        }
+                    }
+                });
             }
 
             // === HISTORY: balance del último mes vs anterior ===
@@ -2618,7 +2966,7 @@
                         return (tot.inc - tot.exp) < 0;
                     });
                     if (allNeg) {
-                        insights.push({ icon: '🚨', tone: 'bad', text: `Tres meses seguidos en rojo. Hora de ajustar.` });
+                        insights.push({ icon: '🫂', tone: 'bad', text: `Llevás 3 meses con balance negativo. Buen momento para revisar dónde se va la plata juntos.` });
                     }
                 }
             }
@@ -2647,14 +2995,14 @@
                     const marginNet = (totInc - totExp) / totInc * 100;
                     const foodCost = totInsumos / totInc * 100;
                     if (marginNet < 10) {
-                        insights.push({ icon: '📉', tone: 'bad', text: `${monthName(lastMonth)}${partial}: margen neto bajo a ${marginNet.toFixed(1)}%. El negocio está apretado.` });
+                        insights.push({ icon: '📉', tone: 'warn', text: `${monthName(lastMonth)}${partial}: el margen quedó en ${marginNet.toFixed(1)}%. Mes con poco aire para invertir.` });
                     } else if (marginNet > 40) {
-                        insights.push({ icon: '🥖', tone: 'good', text: `${monthName(lastMonth)}${partial}: margen neto saludable de ${marginNet.toFixed(1)}%.` });
+                        insights.push({ icon: '🥖', tone: 'good', text: `${monthName(lastMonth)}${partial}: margen ${marginNet.toFixed(1)}%. Buen mes para Mar de Pan.` });
                     }
                     if (foodCost < 15 && totInsumos > 0) {
-                        insights.push({ icon: '🌾', tone: 'info', text: `Tu food cost es ${foodCost.toFixed(1)}%. Verificá si hay insumos cargados en otra subcategoría.` });
+                        insights.push({ icon: '🌾', tone: 'info', text: `Costo de insumos en ${foodCost.toFixed(1)}% de las ventas. Si te parece bajo, mirá si hay compras de harina cargadas en otra categoría.` });
                     } else if (foodCost > 40) {
-                        insights.push({ icon: '🌾', tone: 'warn', text: `Tu food cost subió a ${foodCost.toFixed(1)}%. ¿Cambió el precio de los insumos?` });
+                        insights.push({ icon: '🌾', tone: 'warn', text: `El costo de insumos subió al ${foodCost.toFixed(1)}% de las ventas. Mirá si cambió el precio de la harina o algún otro insumo grande.` });
                     }
                     if (totExtraccion > 0) {
                         const extPct = totExtraccion / totInc * 100;
