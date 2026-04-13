@@ -17,8 +17,8 @@
             --success: #2e7d32;
             --warning: #a76a00;
             --text-color: #3a3a3a;
-            --text-muted: #5e5e5e;
-            --text-subtle: #6b6b6b;
+            --text-muted: #555555;
+            --text-subtle: #555555;
             --shadow-light: #ffffff;
             --shadow-dark: #8ea0bb;
             --font-family: 'Outfit', sans-serif;
@@ -303,7 +303,7 @@
 
         .stat-label {
             font-size: 0.8rem;
-            color: #5e5e5e;
+            color: #555555;
             margin-bottom: 5px;
         }
 
@@ -357,7 +357,7 @@
         }
 
         .chevron {
-            color: #6b6b6b;
+            color: #555555;
             font-size: 0.9rem;
         }
 
@@ -377,7 +377,7 @@
 
         .preview-path {
             font-size: 0.9rem;
-            color: #5e5e5e;
+            color: #555555;
             margin-bottom: 10px;
             word-wrap: break-word;
         }
@@ -565,7 +565,7 @@
                 </button>
             </nav>
             <div class="amount-display">
-                <span style="color:#6b6b6b; font-size:2rem; margin-right:10px;">$</span>
+                <span style="color:#555555; font-size:2rem; margin-right:10px;">$</span>
                 <span id="displayAmount">0</span>
             </div>
         </div>
@@ -616,11 +616,13 @@
                         class="stat-val income">$0</span></div>
                 <div class="stat-item"><span class="stat-label">Total Egresos</span><span id="globExp"
                         class="stat-val expense">$0</span></div>
-                <div class="stat-item" style="grid-column: span 2"><span class="stat-label">Balance Total</span><span
-                        id="globBal" class="stat-val balance">$0</span></div>
+                <div class="stat-item" style="grid-column: span 2" title="Suma de todos los ingresos menos todos los egresos registrados (MdP + Hogar combinados).">
+                    <span class="stat-label">Caja Consolidada</span>
+                    <span id="globBal" class="stat-val balance" aria-label="Caja Consolidada: suma de ingresos menos egresos de MdP y Hogar">$0</span>
+                </div>
             </div>
             <div class="chart-card neu-flat"><canvas id="historyChart"></canvas></div>
-            <h3 style="margin:20px 0 10px 0; color:#5e5e5e; font-size:1rem;">MESES</h3>
+            <h3 style="margin:20px 0 10px 0; color:#555555; font-size:1rem;">MESES</h3>
             <div id="monthList" class="list-container"></div>
         </div>
     </div>
@@ -770,7 +772,7 @@
 
         <h3 style="color:#555; margin-bottom:10px;">🔗 Conexión</h3>
         <div class="neu-flat" style="padding:15px; margin-bottom:20px;">
-            <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:5px;">API URL (Google Apps Script)</div>
+            <div style="font-size:0.8rem; color:#555555; margin-bottom:5px;">API URL (Google Apps Script)</div>
             <div id="cfgApiUrlDisplay" style="font-size:0.85rem; word-break:break-all; color:#555; margin-bottom:10px;">(no configurada)</div>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="configureApi()">Cambiar URL</button>
@@ -785,9 +787,9 @@
                     <button class="neu-btn back-btn" onclick="closeQrModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
                 </div>
                 <h3 id="qrModalTitle" style="color:#555; margin-bottom:10px;">Escanear desde otro dispositivo</h3>
-                <div style="font-size:0.85rem; color:#5e5e5e; margin-bottom:20px;">Abrí la cámara en el otro teléfono o tablet y apuntá al código. Se va a configurar automáticamente y quedar listo para usar.</div>
+                <div style="font-size:0.85rem; color:#555555; margin-bottom:20px;">Abrí la cámara en el otro teléfono o tablet y apuntá al código. Se va a configurar automáticamente y quedar listo para usar.</div>
                 <div id="qrContainer" style="display:flex; justify-content:center; padding:20px; background:white; border-radius:20px; margin-bottom:15px;" role="img" aria-label="Código QR con enlace de configuración"></div>
-                <div style="font-size:0.75rem; color:#6b6b6b;">⚠️ No compartas este código con nadie fuera de tu familia: quien lo escanee queda con acceso de lectura y escritura a tu planilla.</div>
+                <div style="font-size:0.75rem; color:#555555;">⚠️ No compartas este código con nadie fuera de tu familia: quien lo escanee queda con acceso de lectura y escritura a tu planilla.</div>
             </div>
         </div>
 
@@ -800,12 +802,12 @@
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addCategory('Ingreso')">+ Agregar categoría de ingreso</button>
 
         <h3 style="color:#555; margin-bottom:10px;">🔄 Alias (agrupamiento histórico)</h3>
-        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "Alimentacion" → "Alimentación".</div>
+        <div style="font-size:0.8rem; color:#555555; margin-bottom:10px;">Permite que categorías con nombres viejos se muestren agrupadas bajo un nombre actual. Ej: "Alimentacion" → "Alimentación".</div>
         <div id="cfgAliasList" class="list-container" style="padding-bottom:10px;"></div>
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addAlias()">+ Agregar alias</button>
 
-        <h3 id="cfgTagsHeader" style="color:#555; margin-bottom:10px;">🏷️ Tags personales <span style="font-size:0.7rem; color:#5e5e5e; font-weight:normal;">(solo este dispositivo)</span></h3>
-        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Etiquetas para agrupar transacciones por palabras clave del histórico (subcategoría o descripción). Ej: tag "el peque" con patrón "Amadeo" suma todo lo gastado en el nene. <strong>Estos tags NO se sincronizan al spreadsheet ni al deploy público</strong>.</div>
+        <h3 id="cfgTagsHeader" style="color:#555; margin-bottom:10px;">🏷️ Tags personales <span style="font-size:0.7rem; color:#555555; font-weight:normal;">(solo este dispositivo)</span></h3>
+        <div style="font-size:0.8rem; color:#555555; margin-bottom:10px;">Etiquetas para agrupar transacciones por palabras clave del histórico (subcategoría o descripción). Ej: tag "el peque" con patrón "Amadeo" suma todo lo gastado en el nene. <strong>Estos tags NO se sincronizan al spreadsheet ni al deploy público</strong>.</div>
         <div id="cfgTagsList" class="list-container" style="padding-bottom:10px;"></div>
         <button id="cfgTagsAddBtn" class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addPersonalTag()">+ Agregar tag personal</button>
 
@@ -815,7 +817,7 @@
         </div>
 
         <h3 style="color:#555; margin:20px 0 10px 0;">📤 Exportar</h3>
-        <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:10px;">Descarga todas las transacciones como CSV (compatible con Excel en Windows).</div>
+        <div style="font-size:0.8rem; color:#555555; margin-bottom:10px;">Descarga todas las transacciones como CSV (compatible con Excel en Windows).</div>
         <div style="display:flex; gap:10px; margin-bottom:30px;">
             <button class="neu-flat" style="flex:1; padding:12px; border-radius:12px; cursor:pointer;" onclick="exportCSV('all')">Todo el histórico</button>
             <button class="neu-flat" style="flex:1; padding:12px; border-radius:12px; cursor:pointer;" onclick="exportCSV('month')">Este mes</button>
@@ -843,7 +845,7 @@
             <div id="breakTitle" class="app-title">Categorías</div>
         </div>
         <div class="chart-card neu-flat" style="height:300px;"><canvas id="breakChart"></canvas></div>
-        <h3 style="margin:20px 0 10px 0; color:#5e5e5e; font-size:1rem;">DETALLE</h3>
+        <h3 style="margin:20px 0 10px 0; color:#555555; font-size:1rem;">DETALLE</h3>
         <div id="breakList" class="list-container"></div>
     </div>
 
@@ -865,11 +867,11 @@
             <div class="preview-amount" id="prevAmount">$0</div>
         </div>
         <div style="margin-bottom:15px;">
-            <label for="txDate" style="color:#5e5e5e; margin-bottom:6px; display:block; font-size:0.9rem;">Fecha</label>
+            <label for="txDate" style="color:#555555; margin-bottom:6px; display:block; font-size:0.9rem;">Fecha</label>
             <input type="date" id="txDate" class="neu-input">
         </div>
         <div style="margin-bottom:15px;">
-            <div style="color:#5e5e5e; margin-bottom:6px; font-size:0.9rem;">Forma de pago</div>
+            <div style="color:#555555; margin-bottom:6px; font-size:0.9rem;">Forma de pago</div>
             <div id="payMethodGroup" role="radiogroup" aria-label="Forma de pago" style="display:flex; gap:10px;">
                 <button type="button" class="neu-flat pay-opt" data-pay="" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">—</button>
                 <button type="button" class="neu-flat pay-opt" data-pay="Efectivo" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Efectivo</button>
@@ -878,7 +880,7 @@
             </div>
         </div>
         <div style="margin-bottom:20px;">
-            <label for="descInput" style="color:#5e5e5e; margin-bottom:6px; display:block; font-size:0.9rem;">Descripción (Opcional)</label>
+            <label for="descInput" style="color:#555555; margin-bottom:6px; display:block; font-size:0.9rem;">Descripción (Opcional)</label>
             <input type="text" id="descInput" class="neu-input" placeholder="Ej: Compra del domingo..."
                 spellcheck="false" autocomplete="off">
         </div>
@@ -1174,14 +1176,28 @@
         // Detecta si una tx es una "extracción del dueño" en cualquiera de sus
         // formas históricas. Estas transacciones no son sueldo del personal ni
         // ingreso real del hogar: son transferencias internas dueño/negocio.
+        // Regex anclada al inicio para la convención legacy "Sueldo Transición".
+        // Cubre typos (trancisión) y acepta separadores flexibles. Anclar al
+        // inicio evita falsos positivos como "pago de transición" en medio de
+        // otra descripción.
+        const LEGACY_TRANSICION_RE = /^\s*sueldo\s+tran[cs]isi[oó]n/i;
+        // Umbral mínimo para aceptar un "Sueldo Transición" como retiro del dueño.
+        // Los retiros reales son cientos de miles; por debajo es ruido.
+        const LEGACY_TRANSICION_MIN = 50000;
+
+        function _isLegacyTransicion(t) {
+            if (!t) return false;
+            if (Number(t.a || 0) < LEGACY_TRANSICION_MIN) return false;
+            return LEGACY_TRANSICION_RE.test(String(t.desc || ''));
+        }
+
         function isExtractionLegacy(t) {
             if (!t) return false;
-            const desc = (t.desc || '').toLowerCase();
-            // Convención "Sueldo Transición" / "Sueldo Trancisión" en MdP/Sueldos
+            // Convención "Sueldo Transición" en MdP/Sueldos (anclada + umbral)
             if ((t.c === 'MarDePan' || t.c === 'Mar de Pan' || t.c === BIZ_NAME)
                 && t.t === 'Egreso'
                 && (t.s === 'Sueldos' || t.s === 'Sueldo')
-                && (desc.includes('transición') || desc.includes('trancisión') || desc.includes('transicion'))) {
+                && _isLegacyTransicion(t)) {
                 return true;
             }
             // El otro lado del par: ingreso al Hogar con subcategoría "Panadería"
@@ -1196,10 +1212,8 @@
             if (!t || t.t !== 'Egreso') return false;
             if (!(t.c === BIZ_NAME || t.c === 'Mar de Pan' || t.c === 'MarDePan')) return false;
             if (t.s === 'Extracción') return true;
-            // Legacy: sueldos con descripción "Transición"
-            const desc = (t.desc || '').toLowerCase();
-            if ((t.s === 'Sueldos' || t.s === 'Sueldo')
-                && (desc.includes('transición') || desc.includes('trancisión') || desc.includes('transicion'))) {
+            // Legacy: sueldos con descripción "Sueldo Transición" anclada + umbral
+            if ((t.s === 'Sueldos' || t.s === 'Sueldo') && _isLegacyTransicion(t)) {
                 return true;
             }
             return false;
@@ -1479,11 +1493,11 @@
             if (!syncBtn) return;
             const total = PENDING_SYNC + PENDING_QUEUE.length;
             if (total > 0) {
-                syncBtn.innerText = `⏳${total}`;
+                syncBtn.innerHTML = `<span aria-hidden="true">⏳</span><span aria-hidden="true">${total}</span>`;
                 syncBtn.style.color = 'var(--warning)';
                 syncBtn.setAttribute('aria-label', `Sincronizando (${total} pendientes)`);
             } else {
-                syncBtn.innerText = '🔄';
+                syncBtn.innerHTML = '<span aria-hidden="true">🔄</span>';
                 syncBtn.style.color = '';
                 syncBtn.setAttribute('aria-label', 'Sincronizar con servidor');
             }
@@ -1834,7 +1848,7 @@
                         <div style="font-size:0.95rem; font-weight:600; text-align:center; margin-bottom:4px;">
                             ${esc(normalizeCat(tx.c) || '?')}${tx.s ? ' · ' + esc(tx.s) : ''}
                         </div>
-                        <div style="font-size:0.8rem; color:#5e5e5e; text-align:center;">
+                        <div style="font-size:0.8rem; color:#555555; text-align:center;">
                             ${esc(tx.d)}${tx.p ? ' · ' + esc(tx.p) : ''}
                         </div>
                         ${tx.desc ? `<div style="font-size:0.85rem; color:#444; text-align:center; margin-top:10px; font-style:italic;">"${esc(tx.desc)}"</div>` : ''}
@@ -1852,19 +1866,19 @@
                 body.innerHTML = `
                     <div style="padding:5px;">
                         <div style="margin-bottom:14px;">
-                            <label for="txEditAmount" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Monto</label>
+                            <label for="txEditAmount" style="color:#555555; font-size:0.85rem; display:block; margin-bottom:6px;">Monto</label>
                             <input type="number" id="txEditAmount" class="neu-input" value="${Number(tx.a) || 0}" inputmode="decimal" step="any">
                         </div>
                         <div style="margin-bottom:14px;">
-                            <label for="txEditSub" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Subcategoría</label>
+                            <label for="txEditSub" style="color:#555555; font-size:0.85rem; display:block; margin-bottom:6px;">Subcategoría</label>
                             <input type="text" id="txEditSub" class="neu-input" value="${esc(tx.s || '')}" spellcheck="false" autocomplete="off">
                         </div>
                         <div style="margin-bottom:14px;">
-                            <label for="txEditDesc" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Descripción</label>
+                            <label for="txEditDesc" style="color:#555555; font-size:0.85rem; display:block; margin-bottom:6px;">Descripción</label>
                             <input type="text" id="txEditDesc" class="neu-input" value="${esc(tx.desc || '')}" spellcheck="false" autocomplete="off">
                         </div>
                         <div style="margin-bottom:18px;">
-                            <label for="txEditDate" style="color:#5e5e5e; font-size:0.85rem; display:block; margin-bottom:6px;">Fecha</label>
+                            <label for="txEditDate" style="color:#555555; font-size:0.85rem; display:block; margin-bottom:6px;">Fecha</label>
                             <input type="date" id="txEditDate" class="neu-input" value="${esc((tx.d || '').slice(0,10))}">
                         </div>
                         <div style="display:flex; gap:10px;">
@@ -2582,14 +2596,14 @@
                 const div = document.createElement('div'); div.className = 'list-row neu-flat';
                 const subTxs = txs.filter(t => normalizeSub(t.s || 'General') === s);
                 let desc = subTxs.slice(0, 3).map(tx => tx.desc ? `• ${esc(tx.desc)}` : '').filter(d => d).join('<br>');
-                div.innerHTML = `<div style="flex:1;"><div>${esc(s)}</div><div style="font-size:0.8rem;color:#5e5e5e;margin-top:5px;">${desc}</div></div><div class="row-right">$${a.toLocaleString()}</div>`;
+                div.innerHTML = `<div style="flex:1;"><div>${esc(s)}</div><div style="font-size:0.8rem;color:#555555;margin-top:5px;">${desc}</div></div><div class="row-right">$${a.toLocaleString()}</div>`;
                 list.appendChild(div);
             });
 
             // Lista de transacciones individuales (editables)
             if (txs.length > 0) {
                 const sep = document.createElement('div');
-                sep.style.cssText = 'margin-top:20px; margin-bottom:10px; font-size:0.75rem; color:#5e5e5e; text-transform:uppercase; letter-spacing:0.5px; padding:0 5px;';
+                sep.style.cssText = 'margin-top:20px; margin-bottom:10px; font-size:0.75rem; color:#555555; text-transform:uppercase; letter-spacing:0.5px; padding:0 5px;';
                 sep.textContent = `Transacciones (${txs.length}) — tocá para editar o borrar`;
                 list.appendChild(sep);
                 const sortedTxs = txs.slice().sort((a, b) => (b.d || '').localeCompare(a.d || ''));
@@ -2606,7 +2620,7 @@
                     row.innerHTML = `
                         <div style="flex:1; display:flex; flex-direction:column; gap:2px; align-items:flex-start;">
                             <div style="font-size:0.85rem; font-weight:600;">${esc(normalizeSub(t.s || 'General'))}</div>
-                            <div style="font-size:0.72rem; color:#5e5e5e;">${esc(t.d)}${t.desc ? ' — ' + esc(t.desc) : ''}</div>
+                            <div style="font-size:0.72rem; color:#555555;">${esc(t.d)}${t.desc ? ' — ' + esc(t.desc) : ''}</div>
                         </div>
                         <div class="row-right" style="color:${color};">${sign}$${(t.a || 0).toLocaleString()}</div>
                     `;
@@ -2684,7 +2698,7 @@
 
             if (matched.length === 0) {
                 const empty = document.createElement('div');
-                empty.style.cssText = 'text-align:center; color:#5e5e5e; padding:30px; font-size:0.9rem;';
+                empty.style.cssText = 'text-align:center; color:#555555; padding:30px; font-size:0.9rem;';
                 empty.textContent = 'Sin resultados. Probá con otra palabra.';
                 results.appendChild(empty);
                 return;
@@ -2708,7 +2722,7 @@
                 title.style.cssText = 'font-size:0.9rem; font-weight:600;';
                 title.textContent = (normalizeCat(t.c) || '?') + (t.s ? ' · ' + t.s : '');
                 const sub = document.createElement('div');
-                sub.style.cssText = 'font-size:0.75rem; color:#5e5e5e;';
+                sub.style.cssText = 'font-size:0.75rem; color:#555555;';
                 sub.textContent = t.d + (t.desc ? ' — ' + t.desc : '');
                 left.append(title, sub);
 
@@ -2731,7 +2745,7 @@
 
             if (matched.length > 100) {
                 const more = document.createElement('div');
-                more.style.cssText = 'text-align:center; color:#5e5e5e; padding:10px; font-size:0.8rem;';
+                more.style.cssText = 'text-align:center; color:#555555; padding:10px; font-size:0.8rem;';
                 more.textContent = `+${matched.length - 100} resultados más. Refiná tu búsqueda.`;
                 results.appendChild(more);
             }
@@ -2774,19 +2788,21 @@
                 const btnRename = document.createElement('button');
                 btnRename.className = 'neu-flat';
                 btnRename.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
-                btnRename.textContent = '✏️';
+                btnRename.innerHTML = '<span aria-hidden="true">✏️</span>';
+                btnRename.setAttribute('aria-label', `Renombrar categoría ${cat}`);
                 btnRename.onclick = () => renameCategory(type, cat);
                 const btnDelete = document.createElement('button');
                 btnDelete.className = 'neu-flat';
                 btnDelete.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
-                btnDelete.textContent = '🗑';
+                btnDelete.innerHTML = '<span aria-hidden="true">🗑</span>';
+                btnDelete.setAttribute('aria-label', `Eliminar categoría ${cat}`);
                 btnDelete.onclick = () => deleteCategory(type, cat);
                 actions.append(btnRename, btnDelete);
                 header.appendChild(actions);
                 row.appendChild(header);
 
                 const subsEl = document.createElement('div');
-                subsEl.style.cssText = 'font-size:0.8rem; color:#5e5e5e; margin-top:8px;';
+                subsEl.style.cssText = 'font-size:0.8rem; color:#555555; margin-top:8px;';
                 subsEl.textContent = subs.length ? subs.join(' · ') : '(sin subcategorías)';
                 row.appendChild(subsEl);
 
@@ -2817,7 +2833,7 @@
             const keys = Object.keys(ALIASES);
             if (keys.length === 0) {
                 const empty = document.createElement('div');
-                empty.style.cssText = 'color:#6b6b6b; font-size:0.85rem; text-align:center; padding:10px;';
+                empty.style.cssText = 'color:#555555; font-size:0.85rem; text-align:center; padding:10px;';
                 empty.textContent = 'Sin alias configurados';
                 list.appendChild(empty);
                 return;
@@ -2829,7 +2845,7 @@
                 left.className = 'row-left';
                 left.style.fontSize = '0.9rem';
                 const oldSpan = document.createElement('span');
-                oldSpan.style.cssText = 'text-decoration:line-through; color:#6b6b6b;';
+                oldSpan.style.cssText = 'text-decoration:line-through; color:#555555;';
                 oldSpan.textContent = oldName;
                 const arrow = document.createElement('span');
                 arrow.style.margin = '0 8px';
@@ -2840,7 +2856,8 @@
                 const btn = document.createElement('button');
                 btn.className = 'neu-flat';
                 btn.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
-                btn.textContent = '🗑';
+                btn.innerHTML = '<span aria-hidden="true">🗑</span>';
+                btn.setAttribute('aria-label', `Eliminar alias ${oldName}`);
                 btn.onclick = () => deleteAlias(oldName);
                 row.append(left, btn);
                 list.appendChild(row);
@@ -2907,7 +2924,7 @@
             }
             if (PERSONAL_TAGS.length === 0) {
                 const empty = document.createElement('div');
-                empty.style.cssText = 'color:#6b6b6b; font-size:0.85rem; text-align:center; padding:10px;';
+                empty.style.cssText = 'color:#555555; font-size:0.85rem; text-align:center; padding:10px;';
                 empty.textContent = 'Sin tags personales';
                 list.appendChild(empty);
                 return;
@@ -2931,7 +2948,7 @@
                 top.append(labelEl, btnDel);
                 row.appendChild(top);
                 const patterns = document.createElement('div');
-                patterns.style.cssText = 'font-size:0.8rem; color:#5e5e5e; margin-top:8px;';
+                patterns.style.cssText = 'font-size:0.8rem; color:#555555; margin-top:8px;';
                 patterns.textContent = 'Patrones: ' + tag.patterns.join(', ');
                 row.appendChild(patterns);
                 list.appendChild(row);
@@ -3009,12 +3026,19 @@
             return Object.keys(HISTORY_MAP).filter(k => k && /^\d{4}-\d{2}$/.test(k)).sort();
         }
 
-        // Promedio mensual de egresos NO-MdP (gasto del hogar real)
+        // Promedio mensual de egresos NO-MdP (gasto del hogar real).
+        // Excluye el mes en curso: si estamos el día 5 los gastos aún no cargaron y
+        // tiran el promedio artificialmente abajo (lo que hacía que "fondo de reserva"
+        // aparentara cubrir más meses de los reales).
         function _avgMonthlyHogarExp() {
             const months = _sortedMonths();
             if (!months.length) return 0;
+            const today = new Date();
+            const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            const closedMonths = months.filter(m => m !== currentMonthKey);
+            if (!closedMonths.length) return 0;
+            const lastSix = closedMonths.slice(-6);
             let total = 0, count = 0;
-            const lastSix = months.slice(-6);
             lastSix.forEach(m => {
                 let exp = 0;
                 HISTORY_MAP[m].txs.forEach(t => {
@@ -3098,13 +3122,13 @@
                     const monthsCovered = reserve / avgExp;
                     const target = avgExp * RESERVE_TARGET_MONTHS;
                     if (reserve <= 0) {
-                        insights.push({ icon: '🫂', tone: 'bad', text: `Tu reserva está en rojo. Mes difícil pero estás a tiempo de ordenar.` });
+                        insights.push({ icon: '🫂', tone: 'bad', text: `Tu patrimonio del hogar está en rojo. Mes difícil pero estás a tiempo de ordenar.` });
                     } else if (monthsCovered < 1) {
-                        insights.push({ icon: '🔴', tone: 'bad', text: `Tu reserva (${fmtMoney(reserve)}) cubre menos de 1 mes. Cuidado con el colchón.` });
+                        insights.push({ icon: '🔴', tone: 'bad', text: `Tu patrimonio (${fmtMoney(reserve)}) cubre menos de 1 mes de gastos. Cuidado con el colchón.` });
                     } else if (reserve < target) {
-                        insights.push({ icon: '🟡', tone: 'warn', text: `Tu reserva cubre ${monthsCovered.toFixed(1)} meses. Vamos creciendo hacia el objetivo de ${RESERVE_TARGET_MONTHS} meses.` });
+                        insights.push({ icon: '🟡', tone: 'warn', text: `Tu patrimonio del hogar cubre ${monthsCovered.toFixed(1)} meses. Vamos creciendo hacia el objetivo de ${RESERVE_TARGET_MONTHS} meses.` });
                     } else {
-                        insights.push({ icon: '💪', tone: 'good', text: `Tu fondo de reserva está sólido: ${fmtMoney(reserve)} cubre ${monthsCovered.toFixed(1)} meses de gastos.` });
+                        insights.push({ icon: '💪', tone: 'good', text: `Tu patrimonio del hogar está sólido: ${fmtMoney(reserve)} cubre ${monthsCovered.toFixed(1)} meses de gastos.` });
                     }
                 }
             }
@@ -3130,7 +3154,7 @@
                         if (acc > 0 && !firstPositive) { firstPositive = mk; break; }
                     }
                     if (firstPositive && firstPositive === lastClosedMonth) {
-                        insights.push({ icon: '🎉', tone: 'good', text: `${monthName(firstPositive)} fue el primer mes con reserva positiva. Pequeño gran logro.` });
+                        insights.push({ icon: '🎉', tone: 'good', text: `${monthName(firstPositive)} fue el primer mes con patrimonio positivo. Pequeño gran logro.` });
                     }
                 }
             }
@@ -3379,9 +3403,11 @@
             const order = ['bad', 'warn', 'info', 'good'];
             const dominantTone = order.find(t => insights.some(i => i.tone === t)) || 'info';
             el.className = 'insight-bar tone-' + dominantTone;
+            const prefixByTone = { bad: 'Alerta', warn: 'Aviso', info: 'Nota', good: 'OK' };
             el.innerHTML = insights.slice(0, 3).map(i => {
                 const txt = String(i.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                return `<div class="insight-item"><span class="insight-icon" aria-hidden="true">${i.icon}</span><span>${txt}</span></div>`;
+                const prefix = prefixByTone[i.tone] || 'Nota';
+                return `<div class="insight-item"><span class="insight-icon" aria-hidden="true">${i.icon}</span><span><strong>${prefix}:</strong> ${txt}</span></div>`;
             }).join('');
         }
 
