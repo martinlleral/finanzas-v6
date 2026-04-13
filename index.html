@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
     <style>
         :root {
             --bg-color: #e0e5ec;
@@ -717,7 +718,23 @@
         <div class="neu-flat" style="padding:15px; margin-bottom:20px;">
             <div style="font-size:0.8rem; color:#5e5e5e; margin-bottom:5px;">API URL (Google Apps Script)</div>
             <div id="cfgApiUrlDisplay" style="font-size:0.85rem; word-break:break-all; color:#555; margin-bottom:10px;">(no configurada)</div>
-            <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="configureApi()">Cambiar URL</button>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="configureApi()">Cambiar URL</button>
+                <button id="shareConfigBtn" class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="shareConfig()">📱 Configurar otro dispositivo</button>
+            </div>
+        </div>
+
+        <!-- Modal QR (se abre desde shareConfig) -->
+        <div id="qrModal" class="modal-overlay" style="justify-content:center; align-items:center;">
+            <div class="modal-sheet" style="height:auto; max-width:90%; border-radius:30px; padding:30px; text-align:center;">
+                <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+                    <button class="neu-btn back-btn" onclick="closeQrModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
+                </div>
+                <h3 style="color:#555; margin-bottom:10px;">Escanear desde otro dispositivo</h3>
+                <div style="font-size:0.85rem; color:#5e5e5e; margin-bottom:20px;">Abrí la cámara en el otro teléfono o tablet y apuntá al código. Se va a configurar automáticamente y quedar listo para usar.</div>
+                <div id="qrContainer" style="display:flex; justify-content:center; padding:20px; background:white; border-radius:20px; margin-bottom:15px;"></div>
+                <div style="font-size:0.75rem; color:#6b6b6b;">⚠️ No compartas este código con nadie fuera de tu familia: quien lo escanee queda con acceso de lectura y escritura a tu planilla.</div>
+            </div>
         </div>
 
         <h3 style="color:#555; margin-bottom:10px;">📤 Categorías de Egreso</h3>
@@ -822,6 +839,22 @@
     <script>
         // --- MODO DEMO (portafolio) ---
         // Para uso personal: editá API_URL y SCHEMA con tus datos reales
+        // Onboarding multi-dispositivo: si la URL tiene ?api=..., la guardamos
+        // en localStorage y limpiamos el param de la barra de direcciones.
+        // Así un link del tipo .../?api=URL configura el dispositivo en 1 tap.
+        (function handleApiFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const apiParam = params.get('api');
+            if (apiParam && apiParam.trim()) {
+                localStorage.setItem('FINANZAS_API_URL', apiParam.trim());
+                localStorage.removeItem('FINANZAS_CACHE');
+                // Limpiar el query param de la URL sin recargar
+                params.delete('api');
+                const clean = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                window.history.replaceState({}, document.title, clean);
+            }
+        })();
+
         // API_URL: si hay una guardada en localStorage la usa (uso personal);
         // si no, queda vacía (modo demo para portafolio en GitHub Pages)
         const API_URL = localStorage.getItem('FINANZAS_API_URL') || '';
@@ -1367,6 +1400,41 @@
             } catch (e) { console.error('fetchSync error:', e); return false; }
         }
 
+        /* --- Compartir config via QR --- */
+        function shareConfig() {
+            if (!API_URL) {
+                alert('Primero configurá una API URL en este dispositivo.');
+                return;
+            }
+            // Armar el link con query param para onboarding 1-tap
+            const link = `${window.location.origin}${window.location.pathname}?api=${encodeURIComponent(API_URL)}`;
+            const container = document.getElementById('qrContainer');
+            container.innerHTML = '';
+            try {
+                // qrcode() es global, viene del script qrcode-generator
+                // typeNumber=0 = auto, errorCorrectionLevel='M' (15%)
+                const qr = qrcode(0, 'M');
+                qr.addData(link);
+                qr.make();
+                // createSvgTag(cellSize, margin) — cellSize más grande = más legible
+                container.innerHTML = qr.createSvgTag({ scalable: true, cellSize: 6, margin: 2 });
+                const svg = container.querySelector('svg');
+                if (svg) {
+                    svg.style.width = '100%';
+                    svg.style.maxWidth = '260px';
+                    svg.style.height = 'auto';
+                }
+            } catch (e) {
+                container.innerHTML = '<div style="color:var(--secondary)">No se pudo generar el código. Verificá tu conexión.</div>';
+                console.error(e);
+            }
+            document.getElementById('qrModal').classList.add('open');
+        }
+
+        function closeQrModal() {
+            document.getElementById('qrModal').classList.remove('open');
+        }
+
         function configureApi() {
             const current = localStorage.getItem('FINANZAS_API_URL') || '';
             const msg = current
@@ -1455,6 +1523,9 @@
             if (search) search.placeholder = '🔍 Buscar: alimentos, nafta, servicios...';
             // Título del documento
             document.title = 'Finanzas Personales — Demo';
+            // Ocultar botón de compartir config (no aplica al demo)
+            const shareBtn = document.getElementById('shareConfigBtn');
+            if (shareBtn) shareBtn.style.display = 'none';
         }
 
         // Cargar datos en el fondo ni bien abre la app
