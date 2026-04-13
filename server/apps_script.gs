@@ -43,10 +43,28 @@ function jsonResponse(obj) {
 }
 
 function formatDate_(value) {
+  if (value == null || value === '') return '';
+  // Caso 1: Date nativo
   if (value instanceof Date) {
+    if (isNaN(value.getTime())) return '';
     return Utilities.formatDate(value, Session.getScriptTimeZone(), 'yyyy-MM-dd');
   }
-  return String(value || '').slice(0, 10);
+  // Caso 2: string. Puede ser:
+  //   - ISO "2025-11-05" o "2025-11-05T10:00:00Z"
+  //   - Date.toString() "Wed Nov 05 2025 00:00:00 GMT-0300 (...)"
+  //   - "YYYY/MM/DD" u otros
+  const str = String(value);
+  // Si ya arranca con YYYY-MM-DD es ISO, devolver los primeros 10 chars
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+  // Intentar parsear como Date
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  // Fallback: truncar (no debería pasar)
+  return str.slice(0, 10);
 }
 
 function ensurePaymentColumn_(sheet) {
@@ -149,6 +167,63 @@ function updateTransaction(sig, changes) {
   if (changes.desc !== undefined) sheet.getRange(rowNum, 6).setValue(changes.desc);
   if (changes.p !== undefined) sheet.getRange(rowNum, 7).setValue(changes.p);
   return 1;
+}
+
+/* ---------- Mantenimiento (correr a mano desde el editor) ---------- */
+
+/**
+ * Limpia la columna G (Forma de Pago) donde contenga timestamps de JavaScript
+ * tipo "Wed Nov 05 2025 00:00:00 GMT-0300". Deja el header y los valores
+ * legítimos (Efectivo/Banco/MP) intactos.
+ *
+ * Para ejecutar: en el editor de Apps Script, seleccionar esta función
+ * en el desplegable superior y tocar ▶ Ejecutar.
+ */
+function cleanPaymentColumnTimestamps() {
+  const sheet = getSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const range = sheet.getRange(2, 7, lastRow - 1, 1);
+  const values = range.getValues();
+  let cleaned = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i][0];
+    // Un timestamp legacy contiene "GMT" o es un Date object completo
+    if (v instanceof Date || /GMT|\d{4} \d{2}:\d{2}/.test(String(v))) {
+      values[i][0] = '';
+      cleaned++;
+    }
+  }
+  range.setValues(values);
+  Logger.log('Filas limpiadas: ' + cleaned);
+}
+
+/**
+ * Normaliza las fechas de la columna A: si hay strings con formato
+ * "Wed Nov 05 2025..." las convierte a Date reales. Útil si el Apps Script
+ * viejo escribió fechas como texto.
+ *
+ * Para ejecutar: seleccionar del desplegable y tocar ▶ Ejecutar.
+ */
+function normalizeDateColumn() {
+  const sheet = getSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const range = sheet.getRange(2, 1, lastRow - 1, 1);
+  const values = range.getValues();
+  let fixed = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i][0];
+    if (v instanceof Date) continue;
+    if (!v) continue;
+    const parsed = new Date(String(v));
+    if (!isNaN(parsed.getTime())) {
+      values[i][0] = parsed;
+      fixed++;
+    }
+  }
+  range.setValues(values);
+  Logger.log('Fechas normalizadas: ' + fixed);
 }
 
 /* ---------- Entrypoints ---------- */
