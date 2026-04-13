@@ -897,6 +897,16 @@
         </div>
     </div>
 
+    <!-- MODAL: diálogos custom (alert / confirm / prompt) -->
+    <div id="uiDialogModal" class="modal-overlay" style="justify-content:center; align-items:center;" role="dialog" aria-modal="true" aria-labelledby="uiDialogTitle">
+        <div class="modal-sheet" style="height:auto; max-height:85vh; max-width:min(92%, 440px); border-radius:24px; padding:24px 22px;">
+            <div id="uiDialogTitle" class="app-title" style="font-size:1.15rem; margin-bottom:8px; text-align:center;"></div>
+            <div id="uiDialogMessage" style="color:#444; font-size:0.95rem; line-height:1.45; margin-bottom:18px; text-align:center; white-space:pre-wrap; overflow-y:auto;"></div>
+            <div id="uiDialogInputs" style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;"></div>
+            <div id="uiDialogActions" style="display:flex; gap:10px; justify-content:stretch;"></div>
+        </div>
+    </div>
+
     <!-- MODAL: acciones por transacción (editar / eliminar) -->
     <div id="txActionsModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="txActionsTitle">
         <div class="modal-sheet">
@@ -931,6 +941,8 @@
                     localStorage.removeItem('FINANZAS_CACHE');
                 } else {
                     console.warn('API URL rechazada por seguridad:', apiParam);
+                    // En este punto los helpers de diálogo todavía no se cargaron (script de bootstrap),
+                    // así que acá queda el alert nativo — se dispara solo ante phishing y recarga la URL limpia.
                     alert('La URL del parámetro ?api= no es de script.google.com y fue rechazada por seguridad.');
                 }
                 // Limpiar los query params de la URL sin recargar
@@ -1101,18 +1113,17 @@
         }
 
         /* --- NAVIGATION --- */
+        // navStack es la fuente de verdad interna. history.state se usa en paralelo
+        // para que el botón atrás del browser/Android dispare popstate → goBack sin
+        // loops. _skipHistory=true evita empujar al history cuando quien llama ya
+        // vino desde popstate.
         const navStack = [];
-        function navigate(viewId, context = {}) {
-            const current = document.querySelector('.app-view.active');
-            if (current && current.id !== viewId) {
-                navStack.push({ id: current.id, context: window.currentContext });
-                current.classList.remove('active');
-            }
-            window.currentContext = context;
+        let _skipHistoryPush = false;
+
+        function _renderView(viewId, context) {
             document.querySelectorAll('.app-view').forEach(v => { if (v.id !== viewId) v.classList.remove('active'); });
             document.getElementById(viewId).classList.add('active');
-
-            // Trigger specific renders
+            window.currentContext = context || {};
             if (viewId === 'historyView') renderHistory();
             if (viewId === 'monthView') renderMonth(context.monthKey);
             if (viewId === 'breakdownView') renderBreakdown(context.monthKey, context.type);
@@ -1123,13 +1134,56 @@
             if (viewId === 'configView') renderConfig();
         }
 
+        function navigate(viewId, context = {}) {
+            const current = document.querySelector('.app-view.active');
+            if (current && current.id !== viewId) {
+                navStack.push({ id: current.id, context: window.currentContext });
+                current.classList.remove('active');
+                // Empujar al history para que el back físico cierre esta vista primero
+                if (!_skipHistoryPush) {
+                    try {
+                        history.pushState({ navDepth: navStack.length, viewId: viewId }, '');
+                    } catch (e) { /* history API puede fallar en file:// */ }
+                }
+            }
+            _renderView(viewId, context);
+        }
+
         function goBack() {
+            if (navStack.length === 0) return;
+            // Si hay history state nuestro, delegamos al browser: history.back()
+            // dispara popstate que termina llamando a _popNav() abajo.
+            if (history.state && typeof history.state.navDepth === 'number') {
+                history.back();
+                return;
+            }
+            // Fallback sin history (file:// / entornos raros)
+            _popNav();
+        }
+
+        function _popNav() {
             if (navStack.length === 0) return;
             const prev = navStack.pop();
             document.querySelector('.app-view.active').classList.remove('active');
-            document.getElementById(prev.id).classList.add('active');
-            window.currentContext = prev.context;
+            _renderView(prev.id, prev.context || {});
         }
+
+        window.addEventListener('popstate', (e) => {
+            // El browser ya retrocedió el history; solo tenemos que reflejar eso
+            // en el navStack interno. Si el usuario va hacia adelante (forward)
+            // no lo soportamos: llevamos al root.
+            if (navStack.length > 0) {
+                _popNav();
+            } else {
+                // Sin stack interno, sincronizar a home sin empujar nuevo state
+                _skipHistoryPush = true;
+                const currentActive = document.querySelector('.app-view.active');
+                if (currentActive && currentActive.id !== 'homeView') {
+                    _renderView('homeView', {});
+                }
+                _skipHistoryPush = false;
+            }
+        });
 
         /* --- HELPERS de fecha robustos --- */
 
@@ -1355,7 +1409,7 @@
 
         function startTx(type) {
             const amount = parseFloat(inputVal);
-            if (!inputVal || isNaN(amount) || amount <= 0) { alert("Ingresá un monto válido"); return; }
+            if (!inputVal || isNaN(amount) || amount <= 0) { uiAlert("Ingresá un monto válido", "Monto inválido"); return; }
             currentTx.type = type; currentTx.amount = amount;
             openModal(type);
         }
@@ -1934,7 +1988,12 @@
             if (!tx) return;
             const amtStr = '$' + (tx.a || 0).toLocaleString();
             const label = `${normalizeCat(tx.c) || '?'}${tx.s ? ' · ' + tx.s : ''} — ${amtStr}`;
-            if (!confirm(`¿Eliminar esta transacción?\n\n${label}\n\nNo se puede deshacer.`)) return;
+            const ok1 = await uiConfirm(`${label}\n\nEsta acción no se puede deshacer.`, {
+                title: '¿Eliminar transacción?',
+                okLabel: 'Eliminar',
+                danger: true
+            });
+            if (!ok1) return;
             const ok = await deleteTxFromSheet(tx);
             if (ok) {
                 _toast('🗑 Eliminada');
@@ -1943,9 +2002,9 @@
         }
 
         /* --- Compartir config via QR --- */
-        function shareConfig() {
+        async function shareConfig() {
             if (!API_URL) {
-                alert('Primero configurá una API URL en este dispositivo.');
+                await uiAlert('Primero configurá una API URL en este dispositivo.', 'Sin API configurada');
                 return;
             }
             // Armar el link con query param para onboarding 1-tap (incluye token si existe)
@@ -1978,30 +2037,39 @@
             closeModalA11y(document.getElementById('qrModal'));
         }
 
-        function configureApi() {
+        async function configureApi() {
             const currentUrl = localStorage.getItem('FINANZAS_API_URL') || '';
             const currentTok = localStorage.getItem('FINANZAS_API_TOKEN') || '';
             const msg = currentUrl
-                ? `API_URL actual:\n${currentUrl}\n\nPegá una nueva URL o dejá vacío para volver al modo demo:`
+                ? `API actual:\n${currentUrl}\n\nPegá una nueva URL o dejá vacío para volver al modo demo:`
                 : 'Pegá la URL de tu Google Apps Script (o dejá vacío para cancelar):';
-            const input = prompt(msg, currentUrl);
+            const input = await uiPrompt(msg, {
+                title: 'Configurar API',
+                label: 'URL del Apps Script',
+                defaultValue: currentUrl,
+                placeholder: 'https://script.google.com/...'
+            });
             if (input === null) return;
             if (input.trim() === '') {
                 localStorage.removeItem('FINANZAS_API_URL');
                 localStorage.removeItem('FINANZAS_API_TOKEN');
                 localStorage.removeItem('FINANZAS_CACHE');
-                alert('Modo demo activado. Recargando...');
+                await uiAlert('Modo demo activado. Recargando...', 'Listo');
                 location.reload();
                 return;
             }
             // Pedir token también
-            const tok = prompt('Token de seguridad (opcional pero recomendado, debe coincidir con el SECRET_TOKEN del Apps Script):', currentTok);
+            const tok = await uiPrompt('Debe coincidir con el SECRET_TOKEN del Apps Script.', {
+                title: 'Token de seguridad',
+                label: 'Token (opcional pero recomendado)',
+                defaultValue: currentTok
+            });
             if (tok === null) return; // canceló
             localStorage.setItem('FINANZAS_API_URL', input.trim());
             if (tok.trim()) localStorage.setItem('FINANZAS_API_TOKEN', tok.trim());
             else localStorage.removeItem('FINANZAS_API_TOKEN');
             localStorage.removeItem('FINANZAS_CACHE');
-            alert('API_URL guardada. Recargando...');
+            await uiAlert('API guardada. Recargando...', 'Listo');
             location.reload();
         }
 
@@ -2043,6 +2111,167 @@
             }
         }
 
+        /* --- UI Dialog helpers (reemplazo de alert/confirm/prompt nativos) --- */
+        // Stack para soportar diálogos anidados (ej: confirm adentro de otro modal)
+        let _uiDialogStack = [];
+        let _uiDialogResolver = null;
+
+        function _uiDialogClose(result) {
+            const modal = document.getElementById('uiDialogModal');
+            const resolver = _uiDialogResolver;
+            _uiDialogResolver = null;
+            closeModalA11y(modal);
+            // Si hay un diálogo previo en el stack, restaurarlo
+            if (_uiDialogStack.length > 0) {
+                const prev = _uiDialogStack.pop();
+                setTimeout(() => _uiDialogRender(prev), 150);
+            }
+            if (resolver) resolver(result);
+        }
+
+        function _uiDialogRender(opts) {
+            const modal = document.getElementById('uiDialogModal');
+            const titleEl = document.getElementById('uiDialogTitle');
+            const msgEl = document.getElementById('uiDialogMessage');
+            const inputsEl = document.getElementById('uiDialogInputs');
+            const actionsEl = document.getElementById('uiDialogActions');
+
+            titleEl.textContent = opts.title || '';
+            titleEl.style.display = opts.title ? 'block' : 'none';
+            msgEl.textContent = opts.message || '';
+            msgEl.style.display = opts.message ? 'block' : 'none';
+            inputsEl.innerHTML = '';
+            actionsEl.innerHTML = '';
+
+            // Inputs (para prompt)
+            const inputRefs = [];
+            if (opts.inputs && opts.inputs.length) {
+                opts.inputs.forEach((inp, i) => {
+                    if (inp.label) {
+                        const label = document.createElement('label');
+                        label.style.cssText = 'color:#555; font-size:0.82rem; display:block; margin-bottom:4px;';
+                        label.textContent = inp.label;
+                        label.setAttribute('for', `uiDialogInput${i}`);
+                        inputsEl.appendChild(label);
+                    }
+                    const input = document.createElement('input');
+                    input.id = `uiDialogInput${i}`;
+                    input.className = 'neu-input';
+                    input.type = inp.type || 'text';
+                    input.value = inp.value || '';
+                    if (inp.placeholder) input.placeholder = inp.placeholder;
+                    input.autocomplete = 'off';
+                    input.spellcheck = false;
+                    // Enter → acción primaria
+                    input.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            _uiDialogPrimary();
+                        }
+                    });
+                    inputsEl.appendChild(input);
+                    inputRefs.push(input);
+                });
+            }
+
+            // Botones
+            const buttons = opts.buttons || [{ label: 'OK', value: true, primary: true }];
+            const getInputValues = () => inputRefs.map(i => i.value.trim());
+            function _uiDialogPrimary() {
+                const primary = buttons.find(b => b.primary);
+                if (primary) {
+                    const values = getInputValues();
+                    _uiDialogClose(inputRefs.length ? (values.length === 1 ? values[0] : values) : primary.value);
+                }
+            }
+            buttons.forEach(btn => {
+                const b = document.createElement('button');
+                b.className = 'big-btn';
+                b.style.flex = '1';
+                b.style.minHeight = '48px';
+                if (btn.primary) {
+                    b.classList.add('btn-primary');
+                } else if (btn.danger) {
+                    b.style.background = 'var(--secondary)';
+                    b.style.color = '#fff';
+                } else {
+                    b.classList.add('neu-flat');
+                }
+                b.textContent = btn.label;
+                b.addEventListener('click', () => {
+                    if (btn.primary && inputRefs.length) {
+                        const values = getInputValues();
+                        _uiDialogClose(values.length === 1 ? values[0] : values);
+                    } else {
+                        _uiDialogClose(btn.value);
+                    }
+                });
+                actionsEl.appendChild(b);
+            });
+
+            openModalA11y(modal);
+            // Foco al primer input si hay, sino al botón primario
+            setTimeout(() => {
+                if (inputRefs.length) inputRefs[0].focus();
+                else {
+                    const primaryBtn = actionsEl.querySelector('.btn-primary') || actionsEl.querySelector('button');
+                    if (primaryBtn) primaryBtn.focus();
+                }
+            }, 120);
+        }
+
+        function _uiDialogOpen(opts) {
+            return new Promise((resolve) => {
+                // Si ya hay un diálogo abierto, apilar el actual y mostrar el nuevo
+                if (_uiDialogResolver) {
+                    _uiDialogStack.push({ _pending: _uiDialogResolver });
+                    _uiDialogResolver = null;
+                }
+                _uiDialogResolver = resolve;
+                _uiDialogRender(opts);
+            });
+        }
+
+        // API pública
+        function uiAlert(message, title) {
+            return _uiDialogOpen({
+                title: title || 'Aviso',
+                message: message || '',
+                buttons: [{ label: 'OK', value: true, primary: true }]
+            });
+        }
+
+        function uiConfirm(message, opts) {
+            opts = opts || {};
+            return _uiDialogOpen({
+                title: opts.title || 'Confirmar',
+                message: message || '',
+                buttons: [
+                    { label: opts.cancelLabel || 'Cancelar', value: false },
+                    { label: opts.okLabel || 'Aceptar', value: true, primary: !opts.danger, danger: !!opts.danger }
+                ]
+            });
+        }
+
+        function uiPrompt(message, opts) {
+            opts = opts || {};
+            const inputs = [{
+                label: opts.label || '',
+                value: opts.defaultValue || '',
+                placeholder: opts.placeholder || '',
+                type: opts.type || 'text'
+            }];
+            return _uiDialogOpen({
+                title: opts.title || 'Ingresá un valor',
+                message: message || '',
+                inputs: inputs,
+                buttons: [
+                    { label: opts.cancelLabel || 'Cancelar', value: null },
+                    { label: opts.okLabel || 'OK', primary: true }
+                ]
+            });
+        }
+
         // Listener global: Escape cierra el modal abierto, Tab queda atrapado dentro
         document.addEventListener('keydown', (e) => {
             if (!_modalCurrentEl) return;
@@ -2052,6 +2281,7 @@
                 if (_modalCurrentEl.id === 'catModal') closeModal();
                 else if (_modalCurrentEl.id === 'qrModal') closeQrModal();
                 else if (_modalCurrentEl.id === 'txActionsModal') closeTxActions();
+                else if (_modalCurrentEl.id === 'uiDialogModal') _uiDialogClose(null);
                 return;
             }
             if (e.key === 'Tab') {
@@ -2864,20 +3094,27 @@
             });
         }
 
-        function addCategory(type) {
-            const name = prompt(`Nombre de la nueva categoría de ${type}:`);
+        async function addCategory(type) {
+            const name = await uiPrompt(`Dentro de ${type}:`, {
+                title: 'Nueva categoría',
+                label: 'Nombre de la categoría'
+            });
             if (!name || !name.trim()) return;
             const clean = name.trim();
-            if (SCHEMA[type][clean]) { alert('Ya existe esa categoría'); return; }
+            if (SCHEMA[type][clean]) { await uiAlert('Ya existe esa categoría', 'Duplicado'); return; }
             SCHEMA[type][clean] = [];
             renderConfig();
         }
 
-        function renameCategory(type, oldName) {
-            const newName = prompt(`Nuevo nombre para "${oldName}":`, oldName);
+        async function renameCategory(type, oldName) {
+            const newName = await uiPrompt(`Nuevo nombre para "${oldName}":`, {
+                title: 'Renombrar categoría',
+                label: 'Nuevo nombre',
+                defaultValue: oldName
+            });
             if (!newName || !newName.trim() || newName === oldName) return;
             const clean = newName.trim();
-            if (SCHEMA[type][clean]) { alert('Ya existe esa categoría'); return; }
+            if (SCHEMA[type][clean]) { await uiAlert('Ya existe esa categoría', 'Duplicado'); return; }
             SCHEMA[type][clean] = SCHEMA[type][oldName];
             delete SCHEMA[type][oldName];
             // Alias automático: datos viejos se muestran bajo el nuevo nombre
@@ -2885,24 +3122,36 @@
             renderConfig();
         }
 
-        function deleteCategory(type, name) {
-            if (!confirm(`¿Eliminar la categoría "${name}"? Los registros históricos no se tocan.`)) return;
+        async function deleteCategory(type, name) {
+            const ok = await uiConfirm(`"${name}"\n\nLos registros históricos no se tocan.`, {
+                title: '¿Eliminar categoría?',
+                okLabel: 'Eliminar',
+                danger: true
+            });
+            if (!ok) return;
             delete SCHEMA[type][name];
             renderConfig();
         }
 
-        function addSubcategory(type, cat) {
-            const name = prompt(`Nueva subcategoría dentro de "${cat}":`);
+        async function addSubcategory(type, cat) {
+            const name = await uiPrompt(`Dentro de "${cat}":`, {
+                title: 'Nueva subcategoría',
+                label: 'Nombre'
+            });
             if (!name || !name.trim()) return;
             if (!SCHEMA[type][cat]) SCHEMA[type][cat] = [];
-            if (SCHEMA[type][cat].includes(name.trim())) { alert('Ya existe'); return; }
+            if (SCHEMA[type][cat].includes(name.trim())) { await uiAlert('Ya existe', 'Duplicado'); return; }
             SCHEMA[type][cat].push(name.trim());
             renderConfig();
         }
 
-        function editSubcategories(type, cat) {
+        async function editSubcategories(type, cat) {
             const current = (SCHEMA[type][cat] || []).join(', ');
-            const input = prompt(`Subcategorías de "${cat}" separadas por coma:`, current);
+            const input = await uiPrompt(`Separadas por coma:`, {
+                title: `Subcategorías de "${cat}"`,
+                label: 'Lista',
+                defaultValue: current
+            });
             if (input === null) return;
             SCHEMA[type][cat] = input.split(',').map(s => s.trim()).filter(Boolean);
             renderConfig();
@@ -2955,38 +3204,60 @@
             });
         }
 
-        function addPersonalTag() {
-            const label = prompt('Nombre amigable del tag (solo lo verás vos en este dispositivo):');
+        async function addPersonalTag() {
+            const label = await uiPrompt('Solo lo verás vos en este dispositivo.', {
+                title: 'Nuevo tag personal',
+                label: 'Nombre amigable'
+            });
             if (!label || !label.trim()) return;
-            const patternsStr = prompt(`Patrones a buscar (separados por coma). La app va a sumar las transacciones cuya subcategoría o descripción contengan alguno de estos patrones.\n\nEj: "Amadeo, Ama, escuela Ama"`);
+            const patternsStr = await uiPrompt('La app sumará tx cuya subcategoría o descripción contenga alguno.\n\nEj: "Amadeo, Ama, escuela Ama"', {
+                title: 'Patrones a buscar',
+                label: 'Separados por coma'
+            });
             if (patternsStr === null) return;
             const patterns = patternsStr.split(',').map(s => s.trim()).filter(Boolean);
-            if (!patterns.length) { alert('Necesitás al menos un patrón'); return; }
+            if (!patterns.length) { await uiAlert('Necesitás al menos un patrón', 'Tag vacío'); return; }
             PERSONAL_TAGS.push({ label: label.trim(), patterns });
             savePersonalTags();
             renderPersonalTagsList();
         }
 
-        function deletePersonalTag(idx) {
+        async function deletePersonalTag(idx) {
             const tag = PERSONAL_TAGS[idx];
             if (!tag) return;
-            if (!confirm(`¿Eliminar el tag "${tag.label}"?`)) return;
+            const ok = await uiConfirm(`"${tag.label}"`, {
+                title: '¿Eliminar tag?',
+                okLabel: 'Eliminar',
+                danger: true
+            });
+            if (!ok) return;
             PERSONAL_TAGS.splice(idx, 1);
             savePersonalTags();
             renderPersonalTagsList();
         }
 
-        function addAlias() {
-            const oldName = prompt('Nombre viejo (como aparece en el histórico):');
+        async function addAlias() {
+            const oldName = await uiPrompt('Como aparece en el histórico', {
+                title: 'Nuevo alias',
+                label: 'Nombre viejo'
+            });
             if (!oldName || !oldName.trim()) return;
-            const newName = prompt(`"${oldName}" debería mostrarse como:`);
+            const newName = await uiPrompt(`"${oldName}" debería mostrarse como:`, {
+                title: 'Nuevo alias',
+                label: 'Nombre nuevo'
+            });
             if (!newName || !newName.trim()) return;
             ALIASES[oldName.trim()] = newName.trim();
             renderConfig();
         }
 
-        function deleteAlias(oldName) {
-            if (!confirm(`¿Eliminar el alias "${oldName}" → "${ALIASES[oldName]}"?`)) return;
+        async function deleteAlias(oldName) {
+            const ok = await uiConfirm(`"${oldName}" → "${ALIASES[oldName]}"`, {
+                title: '¿Eliminar alias?',
+                okLabel: 'Eliminar',
+                danger: true
+            });
+            if (!ok) return;
             delete ALIASES[oldName];
             renderConfig();
         }
@@ -3005,12 +3276,17 @@
                 setTimeout(() => t.style.display = 'none', 2500);
             } catch (e) {
                 hideLoader();
-                alert('Error al guardar: ' + e.message);
+                await uiAlert('Error al guardar: ' + e.message, 'Falló el guardado');
             }
         }
 
-        function restoreDefaults() {
-            if (!confirm('¿Restaurar categorías y alias por defecto? Se sobrescriben los cambios no guardados.')) return;
+        async function restoreDefaults() {
+            const ok = await uiConfirm('Se sobrescriben los cambios no guardados.', {
+                title: '¿Restaurar defaults?',
+                okLabel: 'Restaurar',
+                danger: true
+            });
+            if (!ok) return;
             SCHEMA = JSON.parse(JSON.stringify(SCHEMA_DEFAULT));
             ALIASES = {...ALIASES_DEFAULT};
             renderConfig();
@@ -3427,7 +3703,7 @@
             txs.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
 
             if (txs.length === 0) {
-                alert('No hay transacciones para exportar');
+                uiAlert('No hay transacciones para exportar', 'Lista vacía');
                 return;
             }
 
