@@ -621,7 +621,7 @@
                     <span id="globBal" class="stat-val balance" aria-label="Caja Consolidada: suma de ingresos menos egresos de MdP y Hogar">$0</span>
                 </div>
             </div>
-            <div class="chart-card neu-flat"><canvas id="historyChart"></canvas></div>
+            <div class="chart-card neu-flat"><canvas id="historyChart" role="img" aria-label="Gráfico de evolución de ingresos y egresos por mes"></canvas></div>
             <h3 style="margin:20px 0 10px 0; color:#555555; font-size:1rem;">MESES</h3>
             <div id="monthList" class="list-container"></div>
         </div>
@@ -636,12 +636,12 @@
 
         <h3 style="color:#555; margin-bottom:10px;">Tasa de Ahorro (%)</h3>
         <div class="chart-card neu-flat" style="height:220px;">
-            <canvas id="savingsTrendChart"></canvas>
+            <canvas id="savingsTrendChart" role="img" aria-label="Tendencia de tasa de ahorro mensual"></canvas>
         </div>
 
         <h3 style="color:#555; margin-bottom:10px;">Costo de Vida (Gastos)</h3>
         <div class="chart-card neu-flat" style="height:220px;">
-            <canvas id="expensesTrendChart"></canvas>
+            <canvas id="expensesTrendChart" role="img" aria-label="Tendencia de egresos por categoría"></canvas>
         </div>
 
         <div class="summary-card neu-flat">
@@ -699,12 +699,12 @@
 
         <h3 style="color:#555; margin-bottom:10px;">Flujo Histórico</h3>
         <div class="chart-card neu-flat" style="height:200px;">
-            <canvas id="mdpFlowChart"></canvas>
+            <canvas id="mdpFlowChart" role="img" aria-label="Flujo de ingresos y egresos del negocio"></canvas>
         </div>
 
         <h3 style="color:#555; margin-bottom:10px;">Distribución de Gastos</h3>
         <div class="chart-card neu-flat" style="height:250px;">
-            <canvas id="mdpCostChart"></canvas>
+            <canvas id="mdpCostChart" role="img" aria-label="Estructura de costos del negocio"></canvas>
         </div>
 
         <h3 style="color:#555; margin-bottom:10px; margin-top:20px;">Inversiones de Capital</h3>
@@ -753,12 +753,12 @@
 
         <h3 style="color:#555; margin-bottom:10px;">Flujo Histórico Hogar</h3>
         <div class="chart-card neu-flat" style="height:200px;">
-            <canvas id="hogarFlowChart"></canvas>
+            <canvas id="hogarFlowChart" role="img" aria-label="Flujo de ingresos y egresos del hogar"></canvas>
         </div>
 
         <h3 style="color:#555; margin-bottom:10px;">Distribución de Gastos Hogar</h3>
         <div class="chart-card neu-flat" style="height:250px;">
-            <canvas id="hogarCostChart"></canvas>
+            <canvas id="hogarCostChart" role="img" aria-label="Estructura de gastos del hogar"></canvas>
         </div>
     </div>
 
@@ -837,14 +837,14 @@
             <div class="stat-item" style="grid-column: span 2"><span class="stat-label">Balance</span><span
                     id="monthBal" class="stat-val balance">$0</span></div>
         </div>
-        <div class="chart-card neu-flat"><canvas id="monthFlowChart"></canvas></div>
+        <div class="chart-card neu-flat"><canvas id="monthFlowChart" role="img" aria-label="Ingresos vs egresos del mes"></canvas></div>
     </div>
 
     <div id="breakdownView" class="app-view">
         <div class="header"><button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div id="breakTitle" class="app-title">Categorías</div>
         </div>
-        <div class="chart-card neu-flat" style="height:300px;"><canvas id="breakChart"></canvas></div>
+        <div class="chart-card neu-flat" style="height:300px;"><canvas id="breakChart" role="img" aria-label="Distribución por categoría"></canvas></div>
         <h3 style="margin:20px 0 10px 0; color:#555555; font-size:1rem;">DETALLE</h3>
         <div id="breakList" class="list-container"></div>
     </div>
@@ -853,7 +853,7 @@
         <div class="header"><button class="neu-btn back-btn" onclick="goBack()" aria-label="Volver"><span aria-hidden="true">⬅</span></button>
             <div id="subTitle" class="app-title">Subcategorías</div>
         </div>
-        <div class="chart-card neu-flat" style="height:300px;"><canvas id="subChart"></canvas></div>
+        <div class="chart-card neu-flat" style="height:300px;"><canvas id="subChart" role="img" aria-label="Distribución por subcategoría"></canvas></div>
         <div id="subList" class="list-container"></div>
     </div>
 
@@ -873,10 +873,10 @@
         <div style="margin-bottom:15px;">
             <div style="color:#555555; margin-bottom:6px; font-size:0.9rem;">Forma de pago</div>
             <div id="payMethodGroup" role="radiogroup" aria-label="Forma de pago" style="display:flex; gap:10px;">
-                <button type="button" class="neu-flat pay-opt" data-pay="" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">—</button>
-                <button type="button" class="neu-flat pay-opt" data-pay="Efectivo" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Efectivo</button>
-                <button type="button" class="neu-flat pay-opt" data-pay="Banco" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Banco</button>
-                <button type="button" class="neu-flat pay-opt" data-pay="MP" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">MP</button>
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="true" tabindex="0" data-pay="" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">—</button>
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="Efectivo" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Efectivo</button>
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="Banco" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Banco</button>
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="MP" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">MP</button>
             </div>
         </div>
         <div style="margin-bottom:20px;">
@@ -1375,6 +1375,14 @@
             };
         }
 
+        // Actualiza el aria-label de un canvas con un resumen textual de los datos
+        // del chart. Esto es lo que leen los screen readers: el canvas es una
+        // imagen opaca para accessibility, así que el resumen textual lo describe.
+        function setChartA11y(canvasId, summary) {
+            const el = document.getElementById(canvasId);
+            if (el && summary) el.setAttribute('aria-label', summary);
+        }
+
         // Paleta determinística para charts: misma categoría = mismo color siempre
         const CHART_PALETTE = [
             '#1a4dff', '#c62828', '#2e7d32', '#a76a00',
@@ -1386,6 +1394,14 @@
             const s = String(label || '');
             for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0;
             return CHART_PALETTE[Math.abs(hash) % CHART_PALETTE.length];
+        }
+
+        // Normalización Unicode NFC: asegura que dos strings visualmente iguales
+        // sean idénticos byte a byte. Ej: "Mar de Pan" con tilde compuesta vs
+        // tilde descompuesta. Crítico para matching de categorías entre frontend
+        // y sheet (si un string vino de copy-paste tiene encoding raro).
+        function nfc(s) {
+            return String(s == null ? '' : s).normalize('NFC');
         }
 
         // Escapa HTML para prevenir XSS en interpolaciones
@@ -1450,19 +1466,49 @@
             document.getElementById('txDate').value = today;
             // Reset medio de pago a ninguno
             currentTx.paymentMethod = '';
-            document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('selected'));
-            document.querySelector('.pay-opt[data-pay=""]').classList.add('selected');
+            _selectPayOpt(document.querySelector('.pay-opt[data-pay=""]'));
             setTimeout(() => document.getElementById('descInput').focus(), 300);
+        }
+
+        // Selecciona un pay-opt sincronizando clase visual + aria-checked + tabindex
+        function _selectPayOpt(btn) {
+            if (!btn) return;
+            const group = btn.parentElement;
+            group.querySelectorAll('.pay-opt').forEach(b => {
+                b.classList.remove('selected');
+                b.setAttribute('aria-checked', 'false');
+                b.setAttribute('tabindex', '-1');
+            });
+            btn.classList.add('selected');
+            btn.setAttribute('aria-checked', 'true');
+            btn.setAttribute('tabindex', '0');
+            currentTx.paymentMethod = btn.dataset.pay || '';
         }
 
         // Click handler para los botones de medio de pago
         document.addEventListener('click', (e) => {
             const btn = e.target.closest('.pay-opt');
             if (!btn) return;
-            const payGroup = btn.parentElement;
-            payGroup.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('selected'));
-            btn.classList.add('selected');
-            currentTx.paymentMethod = btn.dataset.pay || '';
+            _selectPayOpt(btn);
+        });
+
+        // Flechas para navegar el radio group (patrón ARIA estándar)
+        document.addEventListener('keydown', (e) => {
+            const btn = e.target.closest && e.target.closest('.pay-opt');
+            if (!btn) return;
+            const group = btn.parentElement;
+            const opts = Array.from(group.querySelectorAll('.pay-opt'));
+            const idx = opts.indexOf(btn);
+            let next = -1;
+            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % opts.length;
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + opts.length) % opts.length;
+            else if (e.key === 'Home') next = 0;
+            else if (e.key === 'End') next = opts.length - 1;
+            if (next >= 0) {
+                e.preventDefault();
+                _selectPayOpt(opts[next]);
+                opts[next].focus();
+            }
         });
         function cancelConfirm() {
             document.getElementById('confirmView').classList.remove('active');
@@ -1478,6 +1524,7 @@
 
             // Construcción de la transacción principal
             const newTx = {
+                _uid: _makeTxUid(),
                 d: txDate,
                 t: currentTx.type,
                 c: currentTx.category,
@@ -1501,6 +1548,7 @@
                 const pairTag = 'Extracción→Hogar';
                 newTx.desc = (newTx.desc ? newTx.desc + ' · ' : '') + pairTag;
                 txsToCommit.push({
+                    _uid: _makeTxUid(),
                     d: txDate,
                     t: 'Ingreso',
                     c: 'Hogar',
@@ -1513,6 +1561,7 @@
 
             // Optimistic update: agregar al array local inmediatamente
             txsToCommit.forEach(tx => OPTIMISTIC_TXS.push(tx));
+            saveOptimisticTxs();
             TRANSACTIONS = TRANSACTIONS.concat(txsToCommit);
             if (!IS_DEMO) localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
             processHistory();
@@ -1527,10 +1576,23 @@
 
         /* --- SYNC: buffer de transacciones optimistas + cola persistente --- */
 
+        // Generador de uid para tx locales. Usado para:
+        //  1) Dedupe al reinyectar OPTIMISTIC_TXS después de fetchSync
+        //  2) Identificar unívocamente una tx en la cola aunque la edite antes de que se sincronice
+        function _makeTxUid() {
+            return 'tx_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        }
+
         // Transacciones que ya están en TRANSACTIONS localmente pero todavía no
         // confirmamos que llegaron al sheet. Si fetchSync reemplaza TRANSACTIONS
-        // con lo del sheet, las de este buffer se reinyectan.
-        let OPTIMISTIC_TXS = [];
+        // con lo del sheet, las de este buffer se reinyectan. Persistido en
+        // localStorage para sobrevivir a refresh/crash antes de que la cola drene.
+        let OPTIMISTIC_TXS = JSON.parse(localStorage.getItem('FINANZAS_OPTIMISTIC') || '[]');
+
+        function saveOptimisticTxs() {
+            try { localStorage.setItem('FINANZAS_OPTIMISTIC', JSON.stringify(OPTIMISTIC_TXS)); }
+            catch (e) { /* quota / private mode */ }
+        }
 
         // Cola de intents de POST que están pendientes de sincronizar
         let PENDING_QUEUE = JSON.parse(localStorage.getItem('FINANZAS_PENDING') || '[]');
@@ -1629,17 +1691,24 @@
                     }
                     // Éxito asumido (no-cors no permite leer respuesta)
                     PENDING_QUEUE.shift();
-                    // Quitar estas tx del buffer optimistic (ya están en el sheet)
+                    // Quitar estas tx del buffer optimistic (ya están en el sheet).
+                    // Matcheamos por _uid (estable) si existe, sino por referencia.
                     item.txs.forEach(tx => {
-                        const idx = OPTIMISTIC_TXS.indexOf(tx);
+                        let idx = -1;
+                        if (tx._uid) {
+                            idx = OPTIMISTIC_TXS.findIndex(t => t && t._uid === tx._uid);
+                        }
+                        if (idx === -1) idx = OPTIMISTIC_TXS.indexOf(tx);
                         if (idx !== -1) OPTIMISTIC_TXS.splice(idx, 1);
                     });
+                    saveOptimisticTxs();
                     savePendingQueue();
                 } catch (e) {
                     console.error('Sync error:', e);
-                    item.attempts++;
-                    if (item.attempts >= 3) {
-                        // Después de 3 intentos la sacamos para que no bloquee
+                    item.attempts = (item.attempts || 0) + 1;
+                    savePendingQueue();
+                    if (item.attempts >= 5) {
+                        // Después de 5 intentos la sacamos para que no bloquee toda la cola
                         PENDING_QUEUE.shift();
                         savePendingQueue();
                         const t = document.getElementById('toast');
@@ -1647,6 +1716,10 @@
                         t.style.color = 'var(--secondary)';
                         t.style.display = 'block';
                         setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 4000);
+                    } else {
+                        // Backoff exponencial: 2^attempts segundos (2, 4, 8, 16, 32)
+                        const delayMs = Math.min(30000, 1000 * Math.pow(2, item.attempts));
+                        setTimeout(() => processPendingQueue(), delayMs);
                     }
                     break; // Cortar el loop para reintentar después
                 } finally {
@@ -1655,6 +1728,13 @@
                 }
             }
         }
+
+        // Reintentar la cola automáticamente cuando el dispositivo vuelve a estar online.
+        // Esto hace que cargas hechas en el subte / en zonas sin señal se manden solas
+        // apenas recuperás conectividad.
+        window.addEventListener('online', () => {
+            if (PENDING_QUEUE.length > 0) processPendingQueue();
+        });
 
         /* --- DATA & FETCH --- */
         async function fetchData(force = false) {
@@ -1682,6 +1762,13 @@
                 if (r && r.t === CONFIG_MARKER) {
                     configRows.push(r);
                 } else if (r && r.d && r.t) {
+                    // Normalizar strings a NFC para evitar mismatches por encoding
+                    // unicode (tildes compuestas vs descompuestas).
+                    r.t = nfc(r.t);
+                    r.c = nfc(r.c);
+                    r.s = nfc(r.s);
+                    r.desc = nfc(r.desc);
+                    r.p = nfc(r.p);
                     txs.push(r);
                 }
             });
@@ -1746,9 +1833,20 @@
 
                 // Reinyectar tx optimistas que aún no llegaron al server
                 // (evita que desaparezcan del UI mientras están en la cola).
-                const merged = OPTIMISTIC_TXS.length > 0
-                    ? cleanTxs.concat(OPTIMISTIC_TXS)
-                    : cleanTxs;
+                // Dedupe por (d,t,c,s,a,desc): si una tx optimista ya aparece
+                // en el sheet no la volvemos a reinyectar. Esto cierra el agujero
+                // donde reinicios dejaban tx duplicadas.
+                let merged = cleanTxs;
+                if (OPTIMISTIC_TXS.length > 0) {
+                    const sigOf = (t) => `${t.d}|${t.t}|${t.c}|${t.s}|${t.a}|${t.desc}`;
+                    const sheetSigs = new Set(cleanTxs.map(sigOf));
+                    const stillPending = OPTIMISTIC_TXS.filter(t => !sheetSigs.has(sigOf(t)));
+                    if (stillPending.length !== OPTIMISTIC_TXS.length) {
+                        OPTIMISTIC_TXS = stillPending;
+                        saveOptimisticTxs();
+                    }
+                    merged = cleanTxs.concat(stillPending);
+                }
 
                 // Actualizar solo si hay cambios
                 if (JSON.stringify(TRANSACTIONS) !== JSON.stringify(merged)) {
@@ -1775,7 +1873,12 @@
         }
 
         function _txIsPendingSync(tx) {
-            // Busca si la tx sigue en la cola de pending (no llegó al sheet todavía)
+            // Busca si la tx sigue en la cola de pending (no llegó al sheet todavía).
+            // Match por _uid si existe, sino por referencia (tx cargadas del sheet no tienen uid).
+            if (tx && tx._uid) {
+                if (OPTIMISTIC_TXS.some(t => t && t._uid === tx._uid)) return true;
+                if (PENDING_QUEUE.some(item => (item.txs || []).some(t => t && t._uid === tx._uid))) return true;
+            }
             return PENDING_QUEUE.some(item => (item.txs || []).indexOf(tx) !== -1)
                 || OPTIMISTIC_TXS.indexOf(tx) !== -1;
         }
@@ -2300,6 +2403,20 @@
             }
         });
 
+        // B13: Escape fuera de Home vuelve atrás (sin modal abierto).
+        // También Alt+ArrowLeft como shortcut de teclado para back.
+        document.addEventListener('keydown', (e) => {
+            if (_modalCurrentEl) return; // lo maneja el handler de arriba
+            const tag = document.activeElement?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+            const isHome = document.getElementById('homeView').classList.contains('active');
+            if (isHome) return;
+            if (e.key === 'Escape' || (e.altKey && e.key === 'ArrowLeft')) {
+                e.preventDefault();
+                goBack();
+            }
+        });
+
         // Soporte de teclado físico (numpad incluido) en la vista Home
         document.addEventListener('keydown', (e) => {
             // No interceptar combinaciones con modificadores (Cmd+R, Ctrl+L, Cmd+1..9, etc.)
@@ -2472,6 +2589,7 @@
                 },
                 options: chartMoneyOptions({ title: 'Evolución mensual', allowNegative: true })
             });
+            setChartA11y('historyChart', `Evolución mensual de los últimos ${chartLbl.length} meses. Ingresos totales ${fmtMoney(gInc)}, egresos ${fmtMoney(gExp)}, balance ${fmtMoney(gInc - gExp)}.`);
         }
 
         // TRENDS
@@ -2563,6 +2681,29 @@
                 },
                 options: chartMoneyOptions({ legend: false, title: 'Costo de vida mensual' })
             });
+            setChartA11y('savingsTrendChart', `Tasa de ahorro mensual del hogar. Promedio ${avgSave}${count > 0 ? '%' : ''} en ${count} meses.`);
+            setChartA11y('expensesTrendChart', `Costo de vida mensual del hogar. Promedio ${fmtMoney(avgCost)} por mes.`);
+        }
+
+        // Helper compartido entre renderMarDePan y renderHogar:
+        // devuelve el Set de meses válidos según el filtro de tiempo ('all' | '6m' | '3m').
+        function _validMonthsForFilter(timeFilter) {
+            const allMonths = Object.keys(HISTORY_MAP).sort();
+            let validMonths = allMonths;
+            if (timeFilter === '6m') validMonths = allMonths.slice(-6);
+            else if (timeFilter === '3m') validMonths = allMonths.slice(-3);
+            return new Set(validMonths);
+        }
+
+        // Filtra TRANSACTIONS por (ventana de tiempo + scope MdP/Hogar).
+        // scopeFn recibe una tx y devuelve true si pertenece a la vista.
+        function _filterScopedTxs(timeFilter, scopeFn) {
+            const validMonthSet = _validMonthsForFilter(timeFilter);
+            return TRANSACTIONS.filter(t => {
+                const mk = monthKeyOf(t);
+                if (!validMonthSet.has(mk)) return false;
+                return scopeFn(t);
+            });
         }
 
         // MAR DE PAN
@@ -2570,20 +2711,8 @@
         function renderMarDePan(timeFilter = currentMdpFilter) {
             currentMdpFilter = timeFilter;
 
-            // Filtro por fecha
-            const allMonths = Object.keys(HISTORY_MAP).sort();
-            let validMonths = allMonths;
-            if (timeFilter === '6m') validMonths = allMonths.slice(-6);
-            if (timeFilter === '3m') validMonths = allMonths.slice(-3);
-            const validMonthSet = new Set(validMonths);
-
-            // Filter Transactions
-            const mdpTxs = TRANSACTIONS.filter(t => {
-                const mk = monthKeyOf(t);
-                if (!validMonthSet.has(mk)) return false;
-
-                return isMdpTx(t);
-            });
+            // Filtro por fecha + scope MdP
+            const mdpTxs = _filterScopedTxs(timeFilter, isMdpTx);
 
             // Totals
             // Distingo:
@@ -2684,6 +2813,11 @@
                 },
                 options: chartDoughnutOptions({ legendPosition: 'right', title: 'Distribución de costos' })
             });
+            const totalInc = incData.reduce((a, b) => a + b, 0);
+            const totalExp = expData.reduce((a, b) => a + b, 0);
+            setChartA11y('mdpFlowChart', `Flujo del negocio en ${months.length} meses. Ventas ${fmtMoney(totalInc)}, costos ${fmtMoney(totalExp)}, balance ${fmtMoney(totalInc - totalExp)}.`);
+            const topCats = sortedCosts.slice(0, 3).map(c => `${c[0]} ${fmtMoney(c[1])}`).join(', ');
+            setChartA11y('mdpCostChart', `Distribución de costos del negocio. Top categorías: ${topCats || 'sin datos'}.`);
         }
 
         // HOGAR
@@ -2691,20 +2825,8 @@
         function renderHogar(timeFilter = currentHogarFilter) {
             currentHogarFilter = timeFilter;
 
-            // Filtro por fecha
-            const allMonths = Object.keys(HISTORY_MAP).sort();
-            let validMonths = allMonths;
-            if (timeFilter === '6m') validMonths = allMonths.slice(-6);
-            if (timeFilter === '3m') validMonths = allMonths.slice(-3);
-            const validMonthSet = new Set(validMonths);
-
-            // Filter Transactions
-            const hogarTxs = TRANSACTIONS.filter(t => {
-                const mk = monthKeyOf(t);
-                if (!validMonthSet.has(mk)) return false;
-
-                return !isMdpTx(t);
-            });
+            // Filtro por fecha + scope Hogar
+            const hogarTxs = _filterScopedTxs(timeFilter, (t) => !isMdpTx(t));
 
             // Totals
             let totInc = 0, totExp = 0;
@@ -2770,6 +2892,9 @@
                 },
                 options: chartDoughnutOptions({ legendPosition: 'right', title: 'Distribución de gastos Hogar' })
             });
+            setChartA11y('hogarFlowChart', `Flujo del hogar en ${months.length} meses. Ingresos ${fmtMoney(totInc)}, egresos ${fmtMoney(totExp)}, neto ${fmtMoney(net)}.`);
+            const topHogarCats = sortedCosts.slice(0, 3).map(c => `${c[0]} ${fmtMoney(c[1])}`).join(', ');
+            setChartA11y('hogarCostChart', `Distribución de gastos del hogar. Top categorías: ${topHogarCats || 'sin datos'}.`);
         }
 
 
@@ -2795,6 +2920,7 @@
                 },
                 options: chartMoneyOptions({ legend: false })
             });
+            setChartA11y('monthFlowChart', `${key}. Ingresos ${fmtMoney(d.inc)}, egresos ${fmtMoney(d.exp)}, balance ${fmtMoney(d.inc - d.exp)}.`);
         }
         function drillDownMonth(type) { navigate('breakdownView', { monthKey: window.currentContext.monthKey, type: type }); }
 
@@ -2815,6 +2941,8 @@
                 type: 'doughnut', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
                 options: chartDoughnutOptions({ legendPosition: 'bottom' })
             });
+            const topBreak = sorted.slice(0, 3).map(c => `${c[0]} ${fmtMoney(c[1])}`).join(', ');
+            setChartA11y('breakChart', `${key} ${type}. ${sorted.length} categorías. Top: ${topBreak || 'sin datos'}.`);
         }
         function renderSubBreakdown(key, type, cat) {
             document.getElementById('subTitle').innerText = cat;
@@ -2866,6 +2994,8 @@
                 type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
                 options: chartDoughnutOptions({ legendPosition: 'bottom' })
             });
+            const topSub = sorted.slice(0, 3).map(c => `${c[0]} ${fmtMoney(c[1])}`).join(', ');
+            setChartA11y('subChart', `${cat}. ${sorted.length} subcategorías. Top: ${topSub || 'sin datos'}.`);
         }
 
         function showLoader() { document.getElementById('loader').style.display = 'flex'; }
@@ -3017,13 +3147,13 @@
                 actions.style.cssText = 'display:flex; gap:8px;';
                 const btnRename = document.createElement('button');
                 btnRename.className = 'neu-flat';
-                btnRename.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
+                btnRename.style.cssText = 'padding:8px 14px; border-radius:8px; cursor:pointer; font-size:0.85rem; min-width:36px; min-height:36px;';
                 btnRename.innerHTML = '<span aria-hidden="true">✏️</span>';
                 btnRename.setAttribute('aria-label', `Renombrar categoría ${cat}`);
                 btnRename.onclick = () => renameCategory(type, cat);
                 const btnDelete = document.createElement('button');
                 btnDelete.className = 'neu-flat';
-                btnDelete.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
+                btnDelete.style.cssText = 'padding:8px 14px; border-radius:8px; cursor:pointer; font-size:0.85rem; min-width:36px; min-height:36px;';
                 btnDelete.innerHTML = '<span aria-hidden="true">🗑</span>';
                 btnDelete.setAttribute('aria-label', `Eliminar categoría ${cat}`);
                 btnDelete.onclick = () => deleteCategory(type, cat);
@@ -3040,14 +3170,14 @@
                 subActions.style.cssText = 'margin-top:8px; display:flex; gap:5px;';
                 const btnAddSub = document.createElement('button');
                 btnAddSub.className = 'neu-flat';
-                btnAddSub.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.75rem;';
+                btnAddSub.style.cssText = 'padding:8px 14px; border-radius:8px; cursor:pointer; font-size:0.8rem; min-height:36px;';
                 btnAddSub.textContent = '+ sub';
                 btnAddSub.onclick = () => addSubcategory(type, cat);
                 subActions.appendChild(btnAddSub);
                 if (subs.length) {
                     const btnEditSubs = document.createElement('button');
                     btnEditSubs.className = 'neu-flat';
-                    btnEditSubs.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.75rem;';
+                    btnEditSubs.style.cssText = 'padding:8px 14px; border-radius:8px; cursor:pointer; font-size:0.8rem; min-height:36px;';
                     btnEditSubs.textContent = 'editar subs';
                     btnEditSubs.onclick = () => editSubcategories(type, cat);
                     subActions.appendChild(btnEditSubs);
@@ -3085,7 +3215,7 @@
                 left.append(oldSpan, arrow, newSpan);
                 const btn = document.createElement('button');
                 btn.className = 'neu-flat';
-                btn.style.cssText = 'padding:5px 10px; border-radius:8px; cursor:pointer; font-size:0.8rem;';
+                btn.style.cssText = 'padding:8px 14px; border-radius:8px; cursor:pointer; font-size:0.85rem; min-width:36px; min-height:36px;';
                 btn.innerHTML = '<span aria-hidden="true">🗑</span>';
                 btn.setAttribute('aria-label', `Eliminar alias ${oldName}`);
                 btn.onclick = () => deleteAlias(oldName);
@@ -3337,8 +3467,31 @@
             return inc - exp;
         }
 
+        // Memo de computeInsights: cachea por (view + firma cortita de TRANSACTIONS).
+        // Se invalida automáticamente cuando TRANSACTIONS cambia (processHistory),
+        // o cuando pasa el día (la fecha afecta "mes en curso" y "días sin cargar").
+        const _insightsCache = { key: null, results: {} };
+        function _insightsCacheKey() {
+            // Firma barata: length + último tx + fecha de hoy. Cambia cualquiera y se invalida.
+            const last = TRANSACTIONS[TRANSACTIONS.length - 1];
+            const lastSig = last ? `${last.d}|${last.a}|${last.c}` : '';
+            return `${TRANSACTIONS.length}|${lastSig}|${new Date().toISOString().slice(0, 10)}`;
+        }
+
         // Para una vista, devuelve un array de objetos {icon, text, tone}
         function computeInsights(view) {
+            const cacheKey = _insightsCacheKey();
+            if (_insightsCache.key !== cacheKey) {
+                _insightsCache.key = cacheKey;
+                _insightsCache.results = {};
+            }
+            if (_insightsCache.results[view]) return _insightsCache.results[view];
+            const result = _computeInsightsInner(view);
+            _insightsCache.results[view] = result;
+            return result;
+        }
+
+        function _computeInsightsInner(view) {
             const insights = [];
             const months = _sortedMonths();
             if (!months.length) return insights;
