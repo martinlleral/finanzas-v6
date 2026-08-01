@@ -1,5 +1,5 @@
 /**
- * Finanzas V6.2 — Google Apps Script backend (v2.1)
+ * Finanzas V6.2 — Google Apps Script backend (v3)
  *
  * IMPORTANTE - SETEAR ANTES DE DESPLEGAR:
  *   Generá un token random en https://www.uuidgenerator.net/ y pegalo en
@@ -17,8 +17,22 @@ const MAX_BATCH = 50;
 const MAX_AMOUNT = 100000000; // 100 millones, sanity check
 const MAX_DESC_LEN = 500;
 
+// Las filas __CONFIG__ guardan el SCHEMA de la app serializado en base64 dentro
+// del campo descripción. Con el tope de 500 el schema quedaba CORTADO A LA MITAD
+// (medía 517) y la sincronización de categorías entre dispositivos moría en
+// silencio. El tope de 500 sigue vigente para transacciones reales: ahí es una
+// defensa buena.
+const MAX_CONFIG_LEN = 40000;
+
+// Columna H = uid. Es la clave de idempotencia: si una fila con ese uid ya
+// existe, el POST se saltea en vez de duplicar. Aditiva y retrocompatible —
+// las filas viejas (y las que escribe cierre.py) tienen uid vacío y se tratan
+// como "sin idempotencia, escribir siempre".
+const UID_COL = 8;
+const LOCK_MS = 25000;
+
 /**
- * Finanzas V6.2 — Google Apps Script backend (v2)
+ * Instalación y estructura
  *
  * Instrucciones de instalación (se hace UNA sola vez):
  *   1) Abrir el spreadsheet "APP Familia" en Google Sheets
@@ -29,8 +43,13 @@ const MAX_DESC_LEN = 500;
  *      implementación existente → Versión: Nueva versión → Desplegar
  *   6) La URL (ya guardada en la app via ⚙️) NO cambia al redesplegar.
  *
- * Estructura del sheet (columnas A a G):
- *   A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago
+ * Estructura del sheet (columnas A a H):
+ *   A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago | H uid
+ *
+ * OJO: el sheet NO tiene fila de header. La fila 1 es un movimiento real (con
+ * el texto "Forma de Pago" pegado en G1 por un bug viejo de ensurePaymentColumn_,
+ * que ya no se llama). getRawData() la saltea, así que ese movimiento es
+ * invisible para la app. No escribir nada en la fila 1.
  *
  * Endpoints GET:
  *   ?action=getRawData             → devuelve todas las transacciones como JSON
@@ -51,8 +70,49 @@ const MAX_DESC_LEN = 500;
 
 /* ---------- Helpers ---------- */
 
+/**
+ * La hoja de movimientos, POR NOMBRE.
+ *
+ * Antes era `getSheets()[0]`, que es frágil: cualquiera que agregue o reordene
+ * una pestaña (por ejemplo el backup que crea dedupe_movimientos.py) hacía que
+ * la app leyera una hoja vacía y pisara el caché local con []. Además cierre.py
+ * ya usa `worksheet('Movimientos')`, así que ahora los dos apuntan a lo mismo.
+ * Se mantiene el fallback al índice 0 por si algún día se renombra la pestaña.
+ */
 function getSheet() {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  return ss.getSheetByName('Movimientos') || ss.getSheets()[0];
+}
+
+/**
+ * Distinguir errores TRANSITORIOS de errores de VALIDACIÓN es crítico.
+ *
+ * El cliente descarta (a dead-letter) todo lo que el servidor marque como
+ * error, porque reintentar un "Tipo inválido" 8 veces no lo arregla. Pero si
+ * un lock ocupado o un timeout de Google llegaran con la misma forma, la
+ * transacción se perdería por un problema que se resolvía solo reintentando.
+ * Reintentar es seguro: el uid impide que se duplique.
+ */
+const PREFIJO_TRANSITORIO = 'TRANSITORIO: ';
+
+function esTransitorio_(err) {
+  const m = String(err && err.message ? err.message : err);
+  return m.indexOf(PREFIJO_TRANSITORIO) !== -1
+    || /timed? ?out|timeout|too many|rate|internal error|try again|service unavailable|temporarily/i.test(m);
+}
+
+/**
+ * Asegura que la grilla tenga lugar para `n` filas más y las 8 columnas.
+ *
+ * `appendRow` expandía la grilla sola; `setValues` NO. Sin esto, el día que el
+ * sheet llegue a su maxRows (998 con 595 filas usadas al 31/7/2026, o sea ~7
+ * meses de margen) TODA escritura empieza a tirar y cada transacción se pierde.
+ */
+function ensureGrid_(sheet, n) {
+  const faltanFilas = (sheet.getLastRow() + n) - sheet.getMaxRows();
+  if (faltanFilas > 0) sheet.insertRowsAfter(sheet.getMaxRows(), faltanFilas + 100);
+  const faltanCols = UID_COL - sheet.getMaxColumns();
+  if (faltanCols > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), faltanCols);
 }
 
 function jsonResponse(obj) {
@@ -86,14 +146,57 @@ function formatDate_(value) {
   return str.slice(0, 10);
 }
 
+/**
+ * OBSOLETA — no llamar. Escribía un header sobre la fila 1, que en este sheet
+ * es una fila de DATOS (no hay header). Así fue como el texto "Forma de Pago"
+ * terminó siendo la forma de pago del movimiento del 3/11/2025. La columna G ya
+ * existe en todas las filas; queda acá solo como registro de por qué no está.
+ */
 function ensurePaymentColumn_(sheet) {
-  const lastCol = sheet.getLastColumn();
-  if (lastCol < 7) {
-    sheet.getRange(1, 7).setValue('Forma de Pago');
-  } else {
-    const header = sheet.getRange(1, 7).getValue();
-    if (!header) sheet.getRange(1, 7).setValue('Forma de Pago');
+  return; // no-op deliberado
+}
+
+/**
+ * Corre `fn` con el lock del script tomado y commitea ANTES de soltarlo.
+ *
+ * El flush() no es decorativo: sin él, dos POST seguidos con el mismo uid
+ * pueden pasar los dos, porque el segundo lee un índice de uids que todavía no
+ * tiene la escritura del primero.
+ *
+ * LIMITACIÓN CONOCIDA: LockService solo serializa ejecuciones de Apps Script.
+ * cierre.py (skill /cierremdp) escribe con la Sheets API vía service account y
+ * NO respeta este lock. La ventana es ínfima (el cierre es semanal e
+ * interactivo); si alguna vez molesta, migrar a Sheets.Spreadsheets.Values.append
+ * con el servicio avanzado habilitado.
+ */
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(LOCK_MS)) {
+    // TRANSITORIO, no un error de validación: pasa cuando dos dispositivos de
+    // la familia guardan al mismo tiempo. El prefijo lo usa esTransitorio_()
+    // para que el cliente REINTENTE en vez de descartar la transacción.
+    throw new Error(PREFIJO_TRANSITORIO + 'Sheet ocupado, reintentá');
   }
+  try {
+    const r = fn();
+    SpreadsheetApp.flush();
+    return r;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Mapa uid → nº de fila. Barato: una sola columna. */
+function readUidIndex_(sheet) {
+  const last = sheet.getLastRow();
+  const idx = {};
+  if (last < 1) return idx;
+  const vals = sheet.getRange(1, UID_COL, last, 1).getValues();
+  for (let i = 0; i < vals.length; i++) {
+    const u = String(vals[i][0] || '').trim();
+    if (u) idx[u] = i + 1;
+  }
+  return idx;
 }
 
 /* ---------- Read ---------- */
@@ -113,7 +216,8 @@ function getRawData() {
       s: String(row[3] || ''),
       a: Number(row[4] || 0),
       desc: String(row[5] || ''),
-      p: String(row[6] || '')
+      p: String(row[6] || ''),
+      u: String(row[7] || '')   // uid: '' en filas legacy y en las de cierre.py
     });
   }
   return result;
@@ -121,37 +225,59 @@ function getRawData() {
 
 /* ---------- Write ---------- */
 
-function appendRow_(sheet, body) {
-  // Validaciones de seguridad
+/** Valida y arma la fila. NO escribe: eso lo hace addTransactionsAtomic_. */
+function rowFromBody_(body) {
   const type = String(body.type || '');
-  if (!VALID_TYPES.includes(type)) throw new Error('Tipo inválido: ' + type);
+  if (VALID_TYPES.indexOf(type) === -1) throw new Error('Tipo inválido: ' + type);
   const amount = Number(body.amount);
   if (!isFinite(amount) || amount < 0 || amount > MAX_AMOUNT) {
     throw new Error('Monto inválido: ' + body.amount);
   }
-  const desc = String(body.description || '').slice(0, MAX_DESC_LEN);
-  const dateStr = formatDate_(body.date || new Date().toISOString());
-  sheet.appendRow([
-    dateStr,
+  // El tope de descripción es más alto para __CONFIG__: ahí no va una
+  // descripción sino el SCHEMA serializado, que con 500 quedaba truncado.
+  const topeDesc = (type === '__CONFIG__') ? MAX_CONFIG_LEN : MAX_DESC_LEN;
+  return [
+    formatDate_(body.date || new Date().toISOString()),
     type,
     String(body.category || '').slice(0, 100),
     String(body.subcategory || '').slice(0, 100),
     amount,
-    desc,
-    String(body.paymentMethod || body.p || '').slice(0, 50)
-  ]);
+    String(body.description || '').slice(0, topeDesc),
+    String(body.paymentMethod || body.p || '').slice(0, 50),
+    String(body.uid || '').slice(0, 64)   // '' si el cliente es viejo → sin dedupe
+  ];
 }
 
-function addTransaction(body) {
-  const sheet = getSheet();
-  ensurePaymentColumn_(sheet);
-  appendRow_(sheet, body);
-}
-
-function addTransactions(txs) {
-  const sheet = getSheet();
-  ensurePaymentColumn_(sheet);
-  txs.forEach(function (tx) { appendRow_(sheet, tx); });
+/**
+ * Escritura idempotente y atómica.
+ *
+ * 1) Valida TODAS las filas antes de escribir ninguna. El forEach(appendRow_)
+ *    de v2 no era atómico: si la 2ª tx de una extracción dual fallaba, la 1ª
+ *    ya había quedado escrita (media transferencia en el sheet).
+ * 2) Saltea las filas cuyo uid ya está en el sheet o repetido en el batch.
+ *    Esto es lo que mata los duplicados: un reintento del cliente ya no
+ *    escribe una segunda fila.
+ * 3) Escribe todo de una con setValues.
+ */
+function addTransactionsAtomic_(bodies) {
+  return withLock_(function () {
+    const sheet = getSheet();
+    const seen = readUidIndex_(sheet);
+    const rows = [];
+    const skipped = [];
+    bodies.forEach(function (b) {
+      const row = rowFromBody_(b);
+      const uid = row[UID_COL - 1];
+      const dupEnBatch = uid && rows.some(function (r) { return r[UID_COL - 1] === uid; });
+      if (uid && (seen[uid] || dupEnBatch)) { skipped.push(uid); return; }
+      rows.push(row);
+    });
+    if (rows.length) {
+      ensureGrid_(sheet, rows.length);
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, UID_COL).setValues(rows);
+    }
+    return { ok: true, written: rows.length, skipped: skipped };
+  });
 }
 
 /* ---------- Delete / Update (Tier 3) ---------- */
@@ -174,26 +300,46 @@ function findRowIndexBySignature_(sheet, sig) {
   return -1;
 }
 
-function deleteTransaction(sig) {
-  const sheet = getSheet();
-  const rowNum = findRowIndexBySignature_(sheet, sig);
-  if (rowNum < 0) return 0;
-  sheet.deleteRow(rowNum);
-  return 1;
+/**
+ * Ubica la fila a tocar. Prefiere el uid (exacto, sin ambigüedad) y cae a la
+ * firma para las filas legacy que no lo tienen.
+ *
+ * Por qué importa: findRowIndexBySignature_ recorre de atrás para adelante y
+ * devuelve el primer match. Con filas duplicadas eso significa que borrar o
+ * editar tocaba una fila arbitraria — no necesariamente la que el usuario vio.
+ */
+function findRow_(sheet, sig, uid) {
+  if (uid) {
+    const hit = readUidIndex_(sheet)[uid];
+    if (hit) return hit;
+  }
+  return findRowIndexBySignature_(sheet, sig);
 }
 
-function updateTransaction(sig, changes) {
-  const sheet = getSheet();
-  const rowNum = findRowIndexBySignature_(sheet, sig);
-  if (rowNum < 0) return 0;
-  if (changes.d !== undefined) sheet.getRange(rowNum, 1).setValue(formatDate_(changes.d));
-  if (changes.t !== undefined) sheet.getRange(rowNum, 2).setValue(changes.t);
-  if (changes.c !== undefined) sheet.getRange(rowNum, 3).setValue(changes.c);
-  if (changes.s !== undefined) sheet.getRange(rowNum, 4).setValue(changes.s);
-  if (changes.a !== undefined) sheet.getRange(rowNum, 5).setValue(Number(changes.a));
-  if (changes.desc !== undefined) sheet.getRange(rowNum, 6).setValue(changes.desc);
-  if (changes.p !== undefined) sheet.getRange(rowNum, 7).setValue(changes.p);
-  return 1;
+function deleteTransaction(sig, uid) {
+  return withLock_(function () {
+    const sheet = getSheet();
+    const rowNum = findRow_(sheet, sig, uid);
+    if (rowNum < 0) return 0;
+    sheet.deleteRow(rowNum);
+    return 1;
+  });
+}
+
+function updateTransaction(sig, changes, uid) {
+  return withLock_(function () {
+    const sheet = getSheet();
+    const rowNum = findRow_(sheet, sig, uid);
+    if (rowNum < 0) return 0;
+    if (changes.d !== undefined) sheet.getRange(rowNum, 1).setValue(formatDate_(changes.d));
+    if (changes.t !== undefined) sheet.getRange(rowNum, 2).setValue(changes.t);
+    if (changes.c !== undefined) sheet.getRange(rowNum, 3).setValue(changes.c);
+    if (changes.s !== undefined) sheet.getRange(rowNum, 4).setValue(changes.s);
+    if (changes.a !== undefined) sheet.getRange(rowNum, 5).setValue(Number(changes.a));
+    if (changes.desc !== undefined) sheet.getRange(rowNum, 6).setValue(changes.desc);
+    if (changes.p !== undefined) sheet.getRange(rowNum, 7).setValue(changes.p);
+    return 1;
+  });
 }
 
 /* ---------- Auth ---------- */
@@ -290,32 +436,38 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    checkAuth_(e);
+    try {
+      checkAuth_(e);
+    } catch (authErr) {
+      // Un token mal configurado NO es culpa de la transacción: marcarlo
+      // transitorio evita que el cliente tire a la basura todo lo que tenía
+      // en la cola mientras el token estaba mal.
+      return jsonResponse({ error: 'Unauthorized', retriable: true });
+    }
     const body = JSON.parse(e.postData.contents);
     const action = body.action;
     if (action === 'addTransaction') {
-      addTransaction(body);
-      return jsonResponse({ ok: true });
+      return jsonResponse(addTransactionsAtomic_([body]));
     }
     if (action === 'addTransactions' && Array.isArray(body.txs)) {
       if (body.txs.length > MAX_BATCH) {
         return jsonResponse({ error: 'Batch too large (max ' + MAX_BATCH + ')' });
       }
-      addTransactions(body.txs);
-      return jsonResponse({ ok: true, count: body.txs.length });
+      return jsonResponse(addTransactionsAtomic_(body.txs));
     }
     if (action === 'deleteTransaction') {
       Logger.log('DELETE request: ' + JSON.stringify(body.signature || {}));
-      const n = deleteTransaction(body.signature || {});
+      const n = deleteTransaction(body.signature || {}, body.uid || '');
       return jsonResponse({ ok: true, deleted: n });
     }
     if (action === 'updateTransaction') {
       Logger.log('UPDATE request: ' + JSON.stringify(body.signature || {}));
-      const n = updateTransaction(body.signature || {}, body.changes || {});
+      const n = updateTransaction(body.signature || {}, body.changes || {}, body.uid || '');
       return jsonResponse({ ok: true, updated: n });
     }
     return jsonResponse({ error: 'Unknown action' });
   } catch (err) {
-    return jsonResponse({ error: String(err) });
+    Logger.log('doPost error: ' + err);
+    return jsonResponse({ error: String(err), retriable: esTransitorio_(err) });
   }
 }
