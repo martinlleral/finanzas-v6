@@ -56,16 +56,18 @@ El skill `/auditarfinanzas` (en `~/.claude/skills/auditarfinanzas/`) audita el s
 
 ```bash
 node tools/sync-test.js index.html          # motor de sincronización — 5/5
-node tools/auth-test.js server/apps_script.gs  # autenticación — 11/11
+node tools/auth-test.js server/apps_script.gs     # autenticación — 11/11
+node tools/backend-test.js server/apps_script.gs  # backend contra hoja simulada — 16/16
 node tools/layout-harness.js index.html     # layout — 0 fallas de 105 mediciones
 node tools/smoke-test.js index.html         # flujo end-to-end + calibración tipográfica
 ```
 
 - **`sync-test.js`** cubre los caminos donde un bug **no se ve**: la transacción se escribe dos veces o desaparece en silencio. Mockea el servidor y verifica el estado real de la cola, el buffer optimista y los POST. Contra el código previo a la v3 pasa **1 de 5** (el primero falla con `filasEnSheet: esperaba 1, hubo 2`, que es el bug reproducido).
 - **`auth-test.js`** mockea `PropertiesService` para correr `checkAuth_` fuera de Google. Contra la versión previa pasa **2 de 11**.
+- **`backend-test.js`** corre el `.gs` real contra un Google Sheets simulado: idempotencia por uid, validar-todo-antes-de-escribir, truncado de config vs descripción, lock ocupado, expansión de grilla, delete por uid. Es la otra mitad de `sync-test.js` (que prueba el cliente contra un servidor simulado). Contra el backend previo a la v7 pasa **0 de 16**.
 - **`layout-harness.js`**: 7 viewports × 10 vistas × 4 modales, con montos de 9 dígitos tipeados por la ruta real y stress de `$123.456.789`. **Assertion: 0 fallas.** Baseline del 31/7/2026 antes de los fixes: 105.
 
-**Correr los cuatro antes de tocar el motor de sync, la auth o el CSS de layout.**
+**Correr los cinco antes de tocar el motor de sync, la auth o el CSS de layout.**
 
 ## Seguridad: el token
 
