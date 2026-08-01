@@ -2250,6 +2250,25 @@
                 const tokenQs = API_TOKEN ? `&token=${encodeURIComponent(API_TOKEN)}` : '';
                 const res = await fetch(`${API_URL}?action=getRawData${tokenQs}`);
                 const raw = await res.json();
+
+                // El servidor contesta 200 con {error} en vez de un array.
+                // Sin este chequeo, `raw.forEach` explotaba adentro del catch
+                // genérico y el usuario veía "Error al sincronizar" sin pista
+                // de qué hacer — justo en el modo de falla más probable, que es
+                // el token mal configurado.
+                if (!Array.isArray(raw)) {
+                    const err = (raw && raw.error) || 'respuesta inesperada';
+                    if (/unauthorized/i.test(err)) {
+                        _toastSync('🔑 El token de acceso no coincide. Revisalo en ⚙️.');
+                    } else if (/SECRET_TOKEN/i.test(err)) {
+                        _toastSync('🔑 Falta configurar el token en el servidor.');
+                    } else {
+                        _toastSync('⚠️ El servidor respondió: ' + err);
+                    }
+                    console.warn('fetchSync:', err);
+                    return false;
+                }
+
                 // Extraer configuración y separar transacciones reales
                 const cleanTxs = extractConfig(raw);
 

@@ -16,29 +16,64 @@ de los dos lados por separado:
 
 ---
 
-## Paso 1 — Servidor (primero)
+## Paso 0 — Sacar el token del código (una sola vez, 2 minutos)
 
-> ⚠️ **ANTES DE PEGAR: copiá el `SECRET_TOKEN` que ya está desplegado.**
-> En el repo, la línea 13 dice `const SECRET_TOKEN = 'CAMBIAR-POR-UN-TOKEN-RANDOM-DE-32-CHARS'`.
-> Si pegás el archivo tal cual, **le pisás el token real con el placeholder** — y
-> `checkAuth_` tiene un modo permisivo justo para ese placeholder, así que
-> **la autenticación queda desactivada en silencio** y cualquiera con la URL
-> puede leer y escribir la planilla familiar.
->
-> Procedimiento: en el editor de Apps Script, **copiá primero** el valor actual
-> de `SECRET_TOKEN`, pegá el código nuevo, y **volvé a poner ese valor** en la
-> línea 13 antes de guardar.
+**Por qué:** hasta la v3 el token era una constante del `.gs`, con un placeholder
+en el repo y el valor real solo en el editor. Como el procedimiento es
+"seleccioná todo y reemplazá", pegar el archivo pisaba el token real con el
+placeholder — y `checkAuth_` tenía un modo permisivo justo para ese placeholder.
+Resultado: la autenticación se apagaba **en silencio** y cualquiera con la URL
+quedaba con lectura y escritura sobre la planilla familiar.
+
+La v3 lo mueve a las **Propiedades del script**, afuera del código. A partir de
+ahí, pegar el archivo entero ya no puede romperlo nunca más.
 
 1. Abrir el spreadsheet **APP Familia** → Extensiones → Apps Script.
-2. **Copiar el `SECRET_TOKEN` actual** (ver el aviso de arriba).
-3. Seleccionar TODO el código y reemplazarlo por `server/apps_script.gs`.
-4. **Volver a poner el `SECRET_TOKEN`** en la línea 13.
-5. Guardar (Ctrl+S).
-6. Desplegar → Administrar implementaciones → ✏️ lápiz → Versión: **Nueva versión** → Desplegar.
+2. Al final del código que YA está desplegado (el que todavía tiene
+   `const SECRET_TOKEN = '...'`), pegar esta función:
+
+   ```js
+   function migrarTokenAPropiedades() {
+     PropertiesService.getScriptProperties()
+       .setProperty('SECRET_TOKEN', SECRET_TOKEN);
+     Logger.log('Token migrado. Largo: ' + SECRET_TOKEN.length);
+   }
+   ```
+
+3. Elegirla en el desplegable de arriba y tocar **▶ Ejecutar**. En el log tiene
+   que aparecer un largo mayor a 20. **No necesitás ver ni copiar el token.**
+4. Verificar en **Configuración del proyecto ⚙️ → Propiedades del script** que
+   figure `SECRET_TOKEN` con un valor.
+
+> Si por lo que sea el token vigente se perdió: correr `setupToken_()` desde el
+> editor. Genera uno nuevo y lo deja en el log — pero después hay que cargarlo
+> en **cada dispositivo** desde ⚙️ de la app, o dejan de sincronizar.
+
+---
+
+## Paso 1 — Servidor
+
+Recién ahora, y ya sin riesgo: **este archivo no contiene ningún secreto.**
+
+1. Seleccionar TODO el código y reemplazarlo por `server/apps_script.gs`.
+2. Guardar (Ctrl+S).
+3. Elegir `verificarToken_` en el desplegable y **▶ Ejecutar**. Tiene que decir
+   *"OK: hay un SECRET_TOKEN configurado"*. Si dice que no hay, volvé al paso 0
+   antes de desplegar.
+4. Desplegar → Administrar implementaciones → ✏️ lápiz → Versión: **Nueva versión** → Desplegar.
    **La URL no cambia**, así que no hay que tocar nada en los dispositivos.
+
+> **La v3 falla CERRADO**: si no encuentra el token, rechaza todo en vez de
+> dejar pasar. Es a propósito — un servidor cerrado se nota en el primer uso, uno
+> abierto no se nota nunca. Y nada se pierde: el cliente encola las
+> transacciones y las manda solas cuando el token vuelve a estar bien.
 
 ### Verificar antes de seguir (con el cliente viejo todavía en producción)
 
+- [ ] **La autenticación sigue activa.** Desde la terminal, con la URL del deploy:
+      `curl -s "<API_URL>?action=getRawData&token=BASURA"` → tiene que devolver
+      `{"error":"Unauthorized"}`. Si devuelve los datos, **la auth está apagada**:
+      parar todo y volver al paso 0.
 - [ ] Cargar un gasto de **$1** desde el celular → tiene que aparecer **una sola** fila, con la columna H vacía (el cliente viejo todavía no manda uid).
 - [ ] Borrar ese gasto desde la app → tiene que borrarse **esa** fila y ninguna otra.
 - [ ] En el editor de Apps Script: Ejecuciones → que no haya errores rojos.
