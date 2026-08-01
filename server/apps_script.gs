@@ -107,17 +107,14 @@ function esTransitorio_(err) {
 }
 
 /**
- * Asegura que la grilla tenga lugar para `n` filas más y las 8 columnas.
+ * Asegura que la grilla tenga las 8 columnas que necesita appendRow.
  *
- * `appendRow` expandía la grilla sola; `setValues` NO. Sin esto, el día que el
- * sheet llegue a su maxRows (998 con 595 filas usadas al 31/7/2026, o sea ~7
- * meses de margen) TODA escritura empieza a tirar y cada transacción se pierde.
+ * Las FILAS no hacen falta: appendRow expande la grilla solo. Las columnas sí,
+ * porque si la pestaña quedara recortada a 7, appendRow con 8 valores falla.
  */
-function ensureGrid_(sheet, n) {
-  const faltanFilas = (sheet.getLastRow() + n) - sheet.getMaxRows();
-  if (faltanFilas > 0) sheet.insertRowsAfter(sheet.getMaxRows(), faltanFilas + 100);
-  const faltanCols = UID_COL - sheet.getMaxColumns();
-  if (faltanCols > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), faltanCols);
+function ensureColumns_(sheet) {
+  const faltan = UID_COL - sheet.getMaxColumns();
+  if (faltan > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), faltan);
 }
 
 function jsonResponse(obj) {
@@ -170,9 +167,10 @@ function ensurePaymentColumn_(sheet) {
  *
  * LIMITACIÓN CONOCIDA: LockService solo serializa ejecuciones de Apps Script.
  * cierre.py (skill /cierremdp) escribe con la Sheets API vía service account y
- * NO respeta este lock. La ventana es ínfima (el cierre es semanal e
- * interactivo); si alguna vez molesta, migrar a Sheets.Spreadsheets.Values.append
- * con el servicio avanzado habilitado.
+ * NO respeta este lock. Por eso addTransactionsAtomic_ escribe con appendRow y
+ * no con setValues sobre getLastRow()+1: appendRow resuelve el punto de
+ * inserción del lado del servidor, así que una escritura concurrente del cierre
+ * no se puede pisar. En el peor caso quedan dos filas seguidas en otro orden.
  */
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
@@ -254,15 +252,29 @@ function rowFromBody_(body) {
 }
 
 /**
- * Escritura idempotente y atómica.
+ * Escritura idempotente.
  *
  * 1) Valida TODAS las filas antes de escribir ninguna. El forEach(appendRow_)
- *    de v2 no era atómico: si la 2ª tx de una extracción dual fallaba, la 1ª
- *    ya había quedado escrita (media transferencia en el sheet).
+ *    de v2 validaba sobre la marcha: si la 2ª tx de una extracción dual
+ *    fallaba, la 1ª ya había quedado escrita (media transferencia en el sheet).
  * 2) Saltea las filas cuyo uid ya está en el sheet o repetido en el batch.
  *    Esto es lo que mata los duplicados: un reintento del cliente ya no
  *    escribe una segunda fila.
- * 3) Escribe todo de una con setValues.
+ * 3) Escribe con appendRow, UNA fila por vez.
+ *
+ * Sobre el punto 3: la tentación es hacer un solo `setValues` en
+ * `getLastRow()+1`, que es más rápido y "más atómico". Es un error, y grave.
+ * Ese patrón resuelve el punto de inserción en un RPC y escribe en otro, así
+ * que si `cierre.py` (skill /cierremdp, service account, fuera del alcance del
+ * LockService) appendea en el medio, el setValues le PISA las filas. Sin error,
+ * sin duplicado, sin rastro: movimientos reales que desaparecen.
+ * `appendRow` resuelve el punto de inserción del lado del servidor de forma
+ * atómica — Google lo documenta para exactamente esta carrera — y además
+ * expande la grilla sola cuando se acaban las filas.
+ *
+ * ¿Y la atomicidad del batch? La da el uid, no el setValues: si la 2ª fila
+ * falla por un error de infraestructura, el reintento del cliente reenvía las
+ * dos y el servidor saltea la que ya escribió. Idempotencia > atomicidad.
  */
 function addTransactionsAtomic_(bodies) {
   return withLock_(function () {
@@ -278,8 +290,8 @@ function addTransactionsAtomic_(bodies) {
       rows.push(row);
     });
     if (rows.length) {
-      ensureGrid_(sheet, rows.length);
-      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, UID_COL).setValues(rows);
+      ensureColumns_(sheet);
+      rows.forEach(function (r) { sheet.appendRow(r); });
     }
     return { ok: true, written: rows.length, skipped: skipped };
   });

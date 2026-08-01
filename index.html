@@ -236,7 +236,12 @@
             height: auto;
             aspect-ratio: 1;
             border-radius: 12px;
-            font-size: clamp(1rem, 4.2vw, 1.25rem);
+            /* 5.4vw llega al tope de 1.25rem a partir de 370px, así que de 375px
+               para arriba el emoji mide los mismos 20px de siempre. Con 4.2vw
+               se quedaba en 16px y los íconos se veían 20% más chicos en TODOS
+               los teléfonos modernos. Abajo de 370px sí achica, igual que hacía
+               el @media de 360px que este grid reemplazó. */
+            font-size: clamp(1.1rem, 5.4vw, 1.25rem);
             color: var(--primary);
         }
 
@@ -287,7 +292,12 @@
         .amount-currency {
             color: var(--text-muted);
             font-size: 0.5em;
-            margin-right: 0.16em;
+            /* OJO: el `em` de un margin se resuelve contra el font-size PROPIO
+               del elemento (que acá ya es 0.5em del monto), no contra el del
+               padre. Con 0.16em el `$` quedaba a 5px del número — pegado.
+               0.32em da los ~10px del margin-right original a tamaño completo,
+               y sigue escalando cuando el monto se achica. */
+            margin-right: 0.32em;
         }
 
         .action-grid {
