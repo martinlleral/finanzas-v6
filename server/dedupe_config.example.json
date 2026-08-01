@@ -1,0 +1,5 @@
+{
+  "_comment": "Copiá esto a .dedupe_config.json (que está gitignored) y completá con tus valores. El ID no va al repo: es público y el sheet está compartido por link.",
+  "sheet_id": "<ID del spreadsheet, el tramo largo de la URL>",
+  "creds_path": "~/.config/google-sheets/<tu-service-account>.json"
+}

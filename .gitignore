@@ -14,3 +14,9 @@ desktop.ini
 # Docs
 *.pdf
 
+
+# Decisiones de la revisión de duplicados (contiene datos de movimientos reales)
+server/.dedupe_decisiones.json
+backups/
+server/.dedupe_config.json
+server/__pycache__/
