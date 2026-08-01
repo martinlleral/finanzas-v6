@@ -1607,9 +1607,19 @@
             setAmountDisplay(inputVal || '0');
         }
 
+        // Tiene que coincidir con MAX_AMOUNT del Apps Script. Validar acá evita
+        // el peor camino posible: que el usuario cargue el gasto, la app se lo
+        // dé por guardado, y recién el servidor lo rechace — con la transacción
+        // terminando en el dead-letter sin que nadie entienda por qué.
+        const MAX_AMOUNT_CLIENTE = 999999999;
+
         function startTx(type) {
             const amount = parseFloat(inputVal);
             if (!inputVal || isNaN(amount) || amount <= 0) { uiAlert("Ingresá un monto válido", "Monto inválido"); return; }
+            if (amount > MAX_AMOUNT_CLIENTE) {
+                uiAlert(`El monto máximo es ${fmtMoney(MAX_AMOUNT_CLIENTE)}.`, "Monto demasiado grande");
+                return;
+            }
             currentTx.type = type; currentTx.amount = amount;
             openModal(type);
         }
@@ -1618,6 +1628,14 @@
             openModalA11y(m);
             document.getElementById('modalTitle').innerText = `Elegir ${type}`;
             const list = document.getElementById('catList'); list.innerHTML = '';
+            // Guard: si el SCHEMA que vino del sheet no trae este tipo, la app
+            // se quedaba sin poder cargar nada y sin decir por qué.
+            if (!SCHEMA || !SCHEMA[type]) {
+                closeModalA11y(m);
+                uiAlert('Las categorías están dañadas. Restaurá los valores por defecto desde ⚙️.',
+                        'No se pueden mostrar las categorías');
+                return;
+            }
             Object.keys(SCHEMA[type]).forEach(c => {
                 const row = document.createElement('div'); row.className = 'list-row neu-flat';
                 row.innerHTML = `<div class="row-left">${esc(c)}</div><div class="chevron" aria-hidden="true">➤</div>`;
@@ -2191,8 +2209,11 @@
         async function saveConfigToSheet(kind, data) {
             const lsKey = kind === 'schema' ? 'FINANZAS_SCHEMA' : 'FINANZAS_ALIASES';
             if (!API_URL) {
-                // En modo local, solo localStorage
-                localStorage.setItem(lsKey, JSON.stringify(data));
+                // Modo demo (portafolio público): NO se persiste. Si se guardara
+                // en la misma clave que usa el modo real, el día que alguien
+                // configure la API en ese mismo navegador arrancaría con las
+                // categorías anonimizadas del demo — y al guardar las subiría
+                // al sheet de la familia.
                 return;
             }
             const r = await apiPost({
