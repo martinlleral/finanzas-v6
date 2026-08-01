@@ -59,10 +59,10 @@ t('el viejo placeholder ya NO abre la puerta', ()=>{
   catch(e){ return e.message==='Unauthorized'; }});
 
 PROPS={};
-t('setupToken_ genera y persiste', ()=>{const n=setupToken_(); return n.length>=32 && PROPS.SECRET_TOKEN===n;});
-t('verificarToken_ true con token', ()=>verificarToken_()===true);
+t('setupToken genera y persiste', ()=>{const n=setupToken(); return n.length>=32 && PROPS.SECRET_TOKEN===n;});
+t('verificarToken true con token', ()=>verificarToken()===true);
 PROPS={};
-t('verificarToken_ false sin token', ()=>verificarToken_()===false);
+t('verificarToken false sin token', ()=>verificarToken()===false);
 
 let mal=0;
 for(const [n,r] of casos){ if(r!==true){mal++; console.log('❌',n,'→',r);} else console.log('✅',n); }

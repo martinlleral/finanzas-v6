@@ -73,7 +73,7 @@ node tools/smoke-test.js index.html         # flujo end-to-end + calibración ti
 
 **No está en el código, y es a propósito.** Vive en las Propiedades del script (Apps Script → Configuración del proyecto → Propiedades → `SECRET_TOKEN`). Antes era una constante con un placeholder en el repo; como el despliegue es "seleccioná todo y reemplazá", pegar el archivo pisaba el token real con el placeholder — y `checkAuth_` tenía un modo permisivo justo para ese valor, así que **la autenticación se apagaba en silencio**.
 
-- `verificarToken_()` desde el editor dice si está configurado, sin revelarlo.
-- `setupToken_()` genera y guarda uno nuevo (después hay que cargarlo en cada dispositivo desde ⚙️).
+- `verificarToken()` desde el editor dice si está configurado, sin revelarlo.
+- `setupToken()` genera y guarda uno nuevo (después hay que cargarlo en cada dispositivo desde ⚙️).
 - **Falla cerrado**: sin token configurado el script rechaza todo. Es deliberado — un servidor cerrado se nota en el primer uso, uno abierto no se nota nunca. Nada se pierde: el cliente encola y reintenta.
 - Chequeo externo: `curl "<API_URL>?action=getRawData&token=BASURA"` tiene que devolver `{"error":"Unauthorized"}`.

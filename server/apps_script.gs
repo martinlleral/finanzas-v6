@@ -17,7 +17,7 @@
  * pasar: fallar cerrado se detecta en el primer uso, fallar abierto no se
  * detecta nunca.
  *
- * SETUP (una sola vez): ver setupToken_ y migrarTokenAPropiedades más abajo.
+ * SETUP (una sola vez): ver setupToken y migrarTokenAPropiedades más abajo.
  * ROTACIÓN: cambiar el valor de la propiedad SECRET_TOKEN y actualizarlo en
  *   cada dispositivo desde ⚙️ de la app. No hace falta redesplegar.
  */
@@ -409,13 +409,20 @@ function checkAuth_(e) {
     // familiar abierto a cualquiera con la URL, sin ninguna señal.
     // Cerrado se nota en el primer uso; abierto no se nota nunca.
     throw new Error('SECRET_TOKEN no configurado en las Propiedades del script. '
-                  + 'Correr setupToken_() desde el editor.');
+                  + 'Correr setupToken() desde el editor.');
   }
   if (!tokensIguales_(String(token), esperado)) throw new Error('Unauthorized');
   return true;
 }
 
-/* ---------- Setup del token (correr a mano, UNA vez) ---------- */
+/* ---------- Setup del token (correr a mano desde el editor) ----------
+ *
+ * OJO CON EL NOMBRE: estas dos funciones NO llevan guión bajo al final, y es
+ * a propósito. En Apps Script, un `_` final marca la función como privada: no
+ * aparece en el desplegable del editor y no se puede ejecutar a mano. Todo lo
+ * que esté pensado para correrse desde el editor tiene que ir SIN el guión
+ * (igual que cleanPaymentColumnTimestamps y normalizeDateColumn más abajo).
+ */
 
 /**
  * PASO 1 DE LA MIGRACIÓN — correr esto ANTES de pegar el código nuevo.
@@ -435,7 +442,7 @@ function checkAuth_(e) {
  */
 
 /** Genera y guarda un token nuevo. Para el setup inicial o para rotar. */
-function setupToken_() {
+function setupToken() {
   const nuevo = Utilities.getUuid().replace(/-/g, '')
               + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
   PropertiesService.getScriptProperties().setProperty('SECRET_TOKEN', nuevo);
@@ -446,14 +453,14 @@ function setupToken_() {
 }
 
 /** Verifica el estado sin revelar el token. Correr desde el editor. */
-function verificarToken_() {
+function verificarToken() {
   const t = getToken_();
   Logger.log(t
     ? 'OK: hay un SECRET_TOKEN configurado (' + t.length + ' caracteres). '
       + 'La autenticación está activa.'
     : '⚠️ NO hay SECRET_TOKEN configurado. El script está rechazando TODO. '
       + 'Correr migrarTokenAPropiedades() (si venís de la versión vieja) '
-      + 'o setupToken_() (si arrancás de cero).');
+      + 'o setupToken() (si arrancás de cero).');
   return !!t;
 }
 

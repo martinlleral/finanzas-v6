@@ -45,7 +45,7 @@ ahí, pegar el archivo entero ya no puede romperlo nunca más.
 4. Verificar en **Configuración del proyecto ⚙️ → Propiedades del script** que
    figure `SECRET_TOKEN` con un valor.
 
-> Si por lo que sea el token vigente se perdió: correr `setupToken_()` desde el
+> Si por lo que sea el token vigente se perdió: correr `setupToken()` desde el
 > editor. Genera uno nuevo y lo deja en el log — pero después hay que cargarlo
 > en **cada dispositivo** desde ⚙️ de la app, o dejan de sincronizar.
 
@@ -57,7 +57,7 @@ Recién ahora, y ya sin riesgo: **este archivo no contiene ningún secreto.**
 
 1. Seleccionar TODO el código y reemplazarlo por `server/apps_script.gs`.
 2. Guardar (Ctrl+S).
-3. Elegir `verificarToken_` en el desplegable y **▶ Ejecutar**. Tiene que decir
+3. Elegir `verificarToken` en el desplegable y **▶ Ejecutar**. Tiene que decir
    *"OK: hay un SECRET_TOKEN configurado"*. Si dice que no hay, volvé al paso 0
    antes de desplegar.
 4. Desplegar → Administrar implementaciones → ✏️ lápiz → Versión: **Nueva versión** → Desplegar.
