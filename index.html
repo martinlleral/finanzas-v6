@@ -22,6 +22,16 @@
             --shadow-light: #ffffff;
             --shadow-dark: #8ea0bb;
             --font-family: 'Outfit', sans-serif;
+
+            /* Layout: padding lateral de las vistas + safe-area del notch.
+               Sin viewport-fit=cover los env() valen 0px, así que hoy no
+               cambian nada visualmente — quedan listos para cuando se instale
+               como PWA a pantalla completa. */
+            --pad-x: 20px;
+            --sa-t: env(safe-area-inset-top, 0px);
+            --sa-r: env(safe-area-inset-right, 0px);
+            --sa-b: env(safe-area-inset-bottom, 0px);
+            --sa-l: env(safe-area-inset-left, 0px);
         }
 
         * {
@@ -60,14 +70,33 @@
             border: 0;
         }
 
+        /* CONTENCIÓN — el documento nunca scrollea.
+           Las 8 vistas inactivas viven en translateX(100%), o sea ocupan de
+           100% a 200% del ancho del viewport cada una. Antes eso no se veía
+           SOLO porque el overflow:hidden del body se propagaba al viewport —
+           una contención frágil que en desktop directamente fallaba (se podían
+           scrollear 1280px hacia el costado y ver las otras vistas).
+           `overflow: clip` no crea un scroll container, así que ni scrollTo()
+           ni el foco del teclado pueden revelarlas. */
+        html {
+            overflow: hidden;   /* fallback Safari < 16 */
+            overflow: clip;
+        }
+
         body {
             background-color: var(--bg-color);
             color: var(--text-color);
             font-family: var(--font-family);
+            /* position:relative es LA línea clave: hace que el containing block
+               de .app-view (que es position:absolute) pase del viewport al body,
+               y recién ahí el overflow las clipea de verdad como descendientes. */
+            position: relative;
             height: 100vh;
+            height: 100dvh;     /* dvh = viewport real, con la barra de URL visible */
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            overflow: clip;
         }
 
         /* --- LAYOUT --- */
@@ -81,7 +110,12 @@
             transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: calc(20px + var(--sa-t)) calc(var(--pad-x) + var(--sa-r))
+                     calc(20px + var(--sa-b)) calc(var(--pad-x) + var(--sa-l));
+            /* Con overflow-y:auto, el overflow-x computa a `auto` por spec: cada
+               vista era su propio scroller horizontal. Contenido por eje. */
+            overflow-x: hidden;
+            overflow-x: clip;
             overflow-y: auto;
             opacity: 0;
             pointer-events: none;
@@ -98,7 +132,16 @@
 
         #homeView {
             justify-content: space-between;
-            overflow-y: hidden;
+            /* era `hidden`: red de rescate para landscape o teclado abierto,
+               donde ni con la compresión entra todo. */
+            overflow-y: auto;
+        }
+
+        /* Scrollers internos: mismo motivo que .app-view (sus style= inline
+           setean solo la longhand overflow-y, así que esto aplica limpio). */
+        #catList, #txActionsBody, #uiDialogMessage {
+            overflow-x: hidden;
+            overflow-x: clip;
         }
 
         /* --- NEUMORPHISM --- */
@@ -162,38 +205,49 @@
             font-size: 1.4rem;
             font-weight: 600;
             flex: 1;
+            min-width: 0;
+            overflow-wrap: anywhere;
         }
 
-        /* Home Top Bar — ocupa todo el ancho disponible y distribuye íconos */
+        /* Home Top Bar — 6 íconos que TIENEN que entrar hasta en 320px.
+           El problema no era el tamaño del botón sino que la barra pagaba el
+           padding de .app-view a cada lado: 6×44 + 5×8 = 304px necesarios
+           contra 295 disponibles en un iPhone de 375. Se sangra a full-bleed
+           (cancelando ese padding) y con 14px propios entran los 44px de
+           target táctil en todo el rango. */
         .top-bar {
             position: absolute;
             top: 20px;
-            left: 20px;
-            right: 20px;
-            display: flex;
-            gap: 8px;
+            left: calc(-1 * (var(--pad-x) + var(--sa-l)));
+            right: calc(-1 * (var(--pad-x) + var(--sa-r)));
+            padding-left: calc(14px + var(--sa-l));
+            padding-right: calc(14px + var(--sa-r));
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: clamp(4px, 1.5vw, 10px);
+            justify-items: center;
+            align-items: center;
             z-index: 50;
-            justify-content: space-between;
         }
 
         .icon-btn {
-            width: 44px;
-            height: 44px;
+            width: 100%;
+            max-width: 44px;   /* max-width y no width: mantiene el cuadrado */
+            height: auto;
+            aspect-ratio: 1;
             border-radius: 12px;
-            font-size: 1.25rem;
+            /* 5.4vw llega al tope de 1.25rem a partir de 370px, así que de 375px
+               para arriba el emoji mide los mismos 20px de siempre. Con 4.2vw
+               se quedaba en 16px y los íconos se veían 20% más chicos en TODOS
+               los teléfonos modernos. Abajo de 370px sí achica, igual que hacía
+               el @media de 360px que este grid reemplazó. */
+            font-size: clamp(1.1rem, 5.4vw, 1.25rem);
             color: var(--primary);
-            flex-shrink: 0;
         }
 
-        /* En pantallas muy angostas, achicar un toque más */
-        @media (max-width: 360px) {
-            .icon-btn {
-                width: 40px;
-                height: 40px;
-                font-size: 1.1rem;
-            }
-            .top-bar { gap: 6px; }
-        }
+        /* El @media (max-width:360px) que había acá se borró a propósito:
+           llegaba DESPUÉS en el archivo y su width:40px le ganaba al
+           width:100% del grid. Dejarlo era peor que no tener nada. */
 
         /* Amount Display — padding-top reserva espacio para que el top-bar no lo tape */
         .display-area {
@@ -204,25 +258,58 @@
             align-items: flex-end;
             position: relative;
             padding-top: 75px;
+            container-type: inline-size;   /* habilita cqi en .amount-display */
         }
 
+        /* El monto es el número-héroe de la pantalla: tiene que verse grande
+           cuando es corto y COMPLETO cuando es largo.
+           Con 9 dígitos a 4rem el ancho llegaba a ~375px y, como el contenedor
+           alinea a flex-end, el desborde se iba hacia la IZQUIERDA: los dígitos
+           más significativos quedaban fuera de pantalla e inalcanzables por
+           scroll (a 320px el display arrancaba en x = -40px).
+           El JS aporta --amt-chars (cuántos caracteres hay) y el CSS hace toda
+           la matemática: una escritura de custom property por tecla, sin medir
+           ni loops.
+           El 0.62 es el ancho de avance de un dígito tabular en Outfit 300.
+           MEDIDO con Playwright (tras document.fonts.ready) el 31/7/2026: 0.59.
+           Se usa 0.62 a propósito, ~5% de colchón por si cambia la fuente.
+           Si algún día se cambia la tipografía, RE-MEDIRLO, no adivinarlo. */
         .amount-display {
-            font-size: 4rem;
+            --amt-chars: 1;
+            display: flex;
+            align-items: baseline;
+            justify-content: flex-end;
+            max-width: 100%;
             font-weight: 300;
-            margin-bottom: 50px;
+            margin-bottom: clamp(8px, 4dvh, 50px);
             font-variant-numeric: tabular-nums;
+            font-size: clamp(1.5rem, calc((100vw - 52px) / calc(var(--amt-chars) * 0.62 + 0.47)), 4rem);
+            font-size: clamp(1.5rem, calc((100cqi - 12px) / calc(var(--amt-chars) * 0.62 + 0.47)), 4rem);
+        }
+
+        /* Antes era font-size:2rem fijo inline: el $ no acompañaba al monto
+           cuando este se achicaba. */
+        .amount-currency {
+            color: var(--text-muted);
+            font-size: 0.5em;
+            /* OJO: el `em` de un margin se resuelve contra el font-size PROPIO
+               del elemento (que acá ya es 0.5em del monto), no contra el del
+               padre. Con 0.16em el `$` quedaba a 5px del número — pegado.
+               0.32em da los ~10px del margin-right original a tamaño completo,
+               y sigue escalando cuando el monto se achica. */
+            margin-right: 0.32em;
         }
 
         .action-grid {
             display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
+            gap: clamp(10px, 3vw, 20px);
+            margin-bottom: clamp(10px, 2dvh, 20px);
             width: 100%;
         }
 
         .big-btn {
             flex: 1;
-            padding: 20px;
+            padding: clamp(12px, 2.4dvh, 20px);
             border-radius: 25px;
             font-size: 1.1rem;
             color: white;
@@ -251,20 +338,24 @@
             transform: translateY(2px);
         }
 
-        /* Numpad */
+        /* Numpad — el home necesitaba 635px de alto mínimo y un iPhone SE2 con
+           la barra de URL visible tiene ~553. Por eso `dvh` solo no alcanza:
+           mide bien pero no achica nada. Estos clamp/min comprimen SOLO donde
+           no entra; en teléfonos altos todos alcanzan su tope y el layout
+           queda idéntico al de antes. */
         .numpad {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            padding-bottom: 20px;
+            gap: clamp(8px, 2dvh, 15px);
+            padding-bottom: clamp(4px, 1.5dvh, 20px);
         }
 
         .num-key {
-            height: 65px;
-            width: 65px;
+            height: min(65px, 9.5dvh);
+            width: min(65px, 9.5dvh);
             margin: 0 auto;
             border-radius: 50%;
-            font-size: 1.5rem;
+            font-size: clamp(1.1rem, 3.2dvh, 1.5rem);
         }
 
         /* Stats Cards */
@@ -275,12 +366,21 @@
             min-height: 250px;
         }
 
+        /* minmax(0, 1fr) y no 1fr: `1fr` es azúcar de `minmax(auto, 1fr)`, y ese
+           `auto` es el mínimo automático que hace que la pista ESTIRE LA GRILLA
+           en vez de encoger. Con montos de 8 dígitos ($12.345.678 ≈ 149px contra
+           140px de columna en un iPhone de 375) la card entera desbordaba. */
         .summary-card {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 15px;
             padding: 20px;
             margin-bottom: 20px;
+        }
+
+        .summary-card--single {
+            grid-template-columns: minmax(0, 1fr);
+            cursor: pointer;
         }
 
         .stat-item {
@@ -291,6 +391,14 @@
             padding: 10px;
             border-radius: 15px;
             transition: background 0.2s;
+            min-width: 0;
+        }
+
+        .stat-item--row {
+            flex-direction: row;
+            justify-content: space-between;
+            padding: 5px 10px;
+            gap: 10px;
         }
 
         .stat-item.interactive {
@@ -305,12 +413,22 @@
             font-size: 0.8rem;
             color: #555555;
             margin-bottom: 5px;
+            overflow-wrap: anywhere;
         }
 
+        /* `anywhere` y NO `break-word`: la diferencia es que break-word no
+           afecta el cálculo de min-content, así que la grilla seguiría sin
+           poder encoger. Un monto formateado en es-AR ($12.345.678) no tiene
+           espacios: sin esto no hay dónde cortar.
+           El clamp baja de 24px a ~18px en 375px; hoy a ese ancho YA está roto
+           (7 dígitos a 24px piden 149px contra 140 de columna), así que no es
+           una regresión: partir un monto al medio se lee peor que achicarlo. */
         .stat-val {
-            font-size: 1.5rem;
+            font-size: clamp(1.05rem, 4.8vw, 1.5rem);
             font-weight: 600;
             font-variant-numeric: tabular-nums;
+            overflow-wrap: anywhere;
+            line-height: 1.15;
         }
 
         .stat-val.income {
@@ -341,24 +459,50 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
             padding: 18px;
             font-size: 1rem;
             cursor: pointer;
         }
 
+        /* Selector por HIJO DIRECTO, no por .row-left: varias filas (tx,
+           subcategorías, búsqueda) usan <div style="flex:1"> suelto en vez de
+           la clase. Los flex items tienen min-width:auto por default, así que
+           nunca encogen por debajo de su min-content y empujan la fila. */
+        .list-row > * {
+            min-width: 0;
+        }
+
         .row-left {
             display: flex;
             align-items: center;
+            flex: 1 1 auto;
+            min-width: 0;
+            /* wrap resuelve el peor caso: la fila de alias usa 3 <span> sueltos
+               como flex items, o sea "NombreViejo → NombreNuevo" no tenía dónde
+               cortar. */
+            flex-wrap: wrap;
             gap: 10px;
+            overflow-wrap: anywhere;
         }
 
         .row-right {
             font-weight: 600;
+            flex: 0 1 auto;   /* puede encoger si de verdad hace falta */
+            text-align: right;
+            overflow-wrap: anywhere;
         }
 
         .chevron {
             color: #555555;
             font-size: 0.9rem;
+            flex: 0 0 auto;
+        }
+
+        /* Seguro barato: los canvas de Chart.js ya son responsive, pero esto
+           cubre cualquier gráfico futuro. */
+        canvas {
+            max-width: 100%;
         }
 
         /* Preview Card */
@@ -389,6 +533,7 @@
             left: 0;
             width: 100%;
             height: 100%;
+            height: 100dvh;
             background: rgba(0, 0, 0, 0.5);
             z-index: 100;
             opacity: 0;
@@ -409,11 +554,27 @@
             border-top-left-radius: 30px;
             border-top-right-radius: 30px;
             height: 80vh;
+            height: 80dvh;
+            /* Sin este max-height, 80vh se mide contra el viewport GRANDE y el
+               overlay contra el chico: con justify-content:flex-end la sheet
+               sobresalía por arriba y su encabezado quedaba fuera. */
+            max-height: 100%;
             transform: translateY(100%);
             transition: transform 0.3s ease-out;
             padding: 20px;
+            padding-bottom: calc(20px + var(--sa-b));
             display: flex;
             flex-direction: column;
+        }
+
+        /* Reemplaza el style= inline del diálogo (los inline le ganan al CSS,
+           así que moverlo acá es preferible a pelearlo con !important). */
+        .modal-sheet--dialog {
+            height: auto;
+            max-height: 85dvh;
+            max-width: min(92%, 440px);
+            border-radius: 24px;
+            padding: 24px 22px;
         }
 
         .modal-overlay.open .modal-sheet {
@@ -500,7 +661,21 @@
         .insight-bar.tone-bad { border-left: 4px solid var(--secondary); }
         .insight-bar.tone-info { border-left: 4px solid var(--primary); }
 
+        /* 4 botones con flex:1 y "Efectivo" adentro: a 320px hay 62.5px por
+           botón contra ~78px de min-content → desbordaba ~62px en confirmView.
+           Con basis 4.5rem + wrap pasan a dos filas en vez de romper. */
+        #payMethodGroup {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
         .pay-opt {
+            flex: 1 1 4.5rem;
+            min-width: 0;
+            padding: 10px;
+            border-radius: 12px;
+            cursor: pointer;
             font-size: 0.9rem;
             color: var(--text-muted);
             user-select: none;
@@ -565,7 +740,7 @@
                 </button>
             </nav>
             <div class="amount-display">
-                <span style="color:#555555; font-size:2rem; margin-right:10px;">$</span>
+                <span class="amount-currency">$</span>
                 <span id="displayAmount">0</span>
             </div>
         </div>
@@ -708,9 +883,9 @@
         </div>
 
         <h3 style="color:#555; margin-bottom:10px; margin-top:20px;">Inversiones de Capital</h3>
-        <div class="summary-card neu-flat" style="grid-template-columns: 1fr; cursor: pointer;"
+        <div class="summary-card summary-card--single neu-flat"
             onclick="toggleInversiones()">
-            <div class="stat-item" style="flex-direction:row; justify-content:space-between; padding:5px 10px;">
+            <div class="stat-item stat-item--row">
                 <span class="stat-label" style="margin:0;">Total Invertido ▼</span>
                 <span id="mdpInversionesTot" class="stat-val" style="color:var(--primary)">$0</span>
             </div>
@@ -780,18 +955,6 @@
             </div>
         </div>
 
-        <!-- Modal QR (se abre desde shareConfig) -->
-        <div id="qrModal" class="modal-overlay" style="justify-content:center; align-items:center;" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
-            <div class="modal-sheet" style="height:auto; max-width:90%; border-radius:30px; padding:30px; text-align:center;">
-                <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
-                    <button class="neu-btn back-btn" onclick="closeQrModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
-                </div>
-                <h3 id="qrModalTitle" style="color:#555; margin-bottom:10px;">Escanear desde otro dispositivo</h3>
-                <div style="font-size:0.85rem; color:#555555; margin-bottom:20px;">Abrí la cámara en el otro teléfono o tablet y apuntá al código. Se va a configurar automáticamente y quedar listo para usar.</div>
-                <div id="qrContainer" style="display:flex; justify-content:center; padding:20px; background:white; border-radius:20px; margin-bottom:15px;" role="img" aria-label="Código QR con enlace de configuración"></div>
-                <div style="font-size:0.75rem; color:#555555;">⚠️ No compartas este código con nadie fuera de tu familia: quien lo escanee queda con acceso de lectura y escritura a tu planilla.</div>
-            </div>
-        </div>
 
         <h3 style="color:#555; margin-bottom:10px;">📤 Categorías de Egreso</h3>
         <div id="cfgEgresoList" class="list-container" style="padding-bottom:10px;"></div>
@@ -872,11 +1035,11 @@
         </div>
         <div style="margin-bottom:15px;">
             <div style="color:#555555; margin-bottom:6px; font-size:0.9rem;">Forma de pago</div>
-            <div id="payMethodGroup" role="radiogroup" aria-label="Forma de pago" style="display:flex; gap:10px;">
-                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="true" tabindex="0" data-pay="" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">—</button>
-                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="Efectivo" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Efectivo</button>
-                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="Banco" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">Banco</button>
-                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="MP" style="flex:1; padding:10px; border-radius:12px; cursor:pointer;">MP</button>
+            <div id="payMethodGroup" role="radiogroup" aria-label="Forma de pago">
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="true" tabindex="0" data-pay="">—</button>
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="Efectivo">Efectivo</button>
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="Banco">Banco</button>
+                <button type="button" class="neu-flat pay-opt" role="radio" aria-checked="false" tabindex="-1" data-pay="MP">MP</button>
             </div>
         </div>
         <div style="margin-bottom:20px;">
@@ -884,10 +1047,28 @@
             <input type="text" id="descInput" class="neu-input" placeholder="Ej: Compra del domingo..."
                 spellcheck="false" autocomplete="off">
         </div>
-        <button class="big-btn btn-primary" onclick="submitFinal()">GUARDAR</button>
+        <button id="saveBtn" class="big-btn btn-primary" onclick="submitFinal()">GUARDAR</button>
     </div>
 
     <!-- MODAL -->
+    <!-- Modal QR (se abre desde shareConfig).
+         Vive como hijo directo de <body> y NO dentro de #configView: un
+         ancestro con `transform` (que es como se animan las .app-view) rompe
+         position:fixed, y el modal se posicionaba contra la vista en vez de
+         contra el viewport — se salía de pantalla en los 7 anchos medidos. -->
+    <!-- Modal QR (se abre desde shareConfig) -->
+    <div id="qrModal" class="modal-overlay" style="justify-content:center; align-items:center;" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle">
+        <div class="modal-sheet" style="height:auto; max-width:90%; border-radius:30px; padding:30px; text-align:center;">
+            <div style="display:flex; justify-content:flex-end; margin-bottom:10px;">
+                <button class="neu-btn back-btn" onclick="closeQrModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
+            </div>
+            <h3 id="qrModalTitle" style="color:#555; margin-bottom:10px;">Escanear desde otro dispositivo</h3>
+            <div style="font-size:0.85rem; color:#555555; margin-bottom:20px;">Abrí la cámara en el otro teléfono o tablet y apuntá al código. Se va a configurar automáticamente y quedar listo para usar.</div>
+            <div id="qrContainer" style="display:flex; justify-content:center; padding:20px; background:white; border-radius:20px; margin-bottom:15px;" role="img" aria-label="Código QR con enlace de configuración"></div>
+            <div style="font-size:0.75rem; color:#555555;">⚠️ No compartas este código con nadie fuera de tu familia: quien lo escanee queda con acceso de lectura y escritura a tu planilla.</div>
+        </div>
+    </div>
+
     <div id="catModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-sheet">
             <div class="header"><button class="neu-btn back-btn" onclick="closeModal()" aria-label="Cerrar"><span aria-hidden="true">✖</span></button>
@@ -899,7 +1080,7 @@
 
     <!-- MODAL: diálogos custom (alert / confirm / prompt) -->
     <div id="uiDialogModal" class="modal-overlay" style="justify-content:center; align-items:center;" role="dialog" aria-modal="true" aria-labelledby="uiDialogTitle">
-        <div class="modal-sheet" style="height:auto; max-height:85vh; max-width:min(92%, 440px); border-radius:24px; padding:24px 22px;">
+        <div class="modal-sheet modal-sheet--dialog">
             <div id="uiDialogTitle" class="app-title" style="font-size:1.15rem; margin-bottom:8px; text-align:center;"></div>
             <div id="uiDialogMessage" style="color:#444; font-size:0.95rem; line-height:1.45; margin-bottom:18px; text-align:center; white-space:pre-wrap; overflow-y:auto;"></div>
             <div id="uiDialogInputs" style="display:flex; flex-direction:column; gap:10px; margin-bottom:18px;"></div>
@@ -1416,16 +1597,39 @@
 
         /* --- BASIC LOGIC (Input, Modal, TX) --- */
         let inputVal = "";
+
+        // Único punto que escribe el monto en pantalla. Además del texto,
+        // publica --amt-chars para que el CSS calcule el font-size que hace
+        // que el número entre siempre (ver .amount-display).
+        function setAmountDisplay(str) {
+            const s = String(str == null || str === '' ? '0' : str);
+            const el = document.getElementById('displayAmount');
+            if (!el) return;
+            el.innerText = s;
+            // +1 por el símbolo $, que también ocupa
+            if (el.parentElement) el.parentElement.style.setProperty('--amt-chars', s.length);
+        }
+
         function pressNum(v) {
             if (v === 'back') inputVal = inputVal.slice(0, -1);
             else if (v === '.') { if (!inputVal.includes('.')) inputVal += '.'; }
             else if (inputVal.length < 9) inputVal += v;
-            document.getElementById('displayAmount').innerText = inputVal || '0';
+            setAmountDisplay(inputVal || '0');
         }
+
+        // Tiene que coincidir con MAX_AMOUNT del Apps Script. Validar acá evita
+        // el peor camino posible: que el usuario cargue el gasto, la app se lo
+        // dé por guardado, y recién el servidor lo rechace — con la transacción
+        // terminando en el dead-letter sin que nadie entienda por qué.
+        const MAX_AMOUNT_CLIENTE = 999999999;
 
         function startTx(type) {
             const amount = parseFloat(inputVal);
             if (!inputVal || isNaN(amount) || amount <= 0) { uiAlert("Ingresá un monto válido", "Monto inválido"); return; }
+            if (amount > MAX_AMOUNT_CLIENTE) {
+                uiAlert(`El monto máximo es ${fmtMoney(MAX_AMOUNT_CLIENTE)}.`, "Monto demasiado grande");
+                return;
+            }
             currentTx.type = type; currentTx.amount = amount;
             openModal(type);
         }
@@ -1434,6 +1638,14 @@
             openModalA11y(m);
             document.getElementById('modalTitle').innerText = `Elegir ${type}`;
             const list = document.getElementById('catList'); list.innerHTML = '';
+            // Guard: si el SCHEMA que vino del sheet no trae este tipo, la app
+            // se quedaba sin poder cargar nada y sin decir por qué.
+            if (!SCHEMA || !SCHEMA[type]) {
+                closeModalA11y(m);
+                uiAlert('Las categorías están dañadas. Restaurá los valores por defecto desde ⚙️.',
+                        'No se pueden mostrar las categorías');
+                return;
+            }
             Object.keys(SCHEMA[type]).forEach(c => {
                 const row = document.createElement('div'); row.className = 'list-row neu-flat';
                 row.innerHTML = `<div class="row-left">${esc(c)}</div><div class="chevron" aria-hidden="true">➤</div>`;
@@ -1514,7 +1726,20 @@
             document.getElementById('confirmView').classList.remove('active');
             document.getElementById('homeView').classList.add('active');
         }
+        // Guard anti-doble-disparo. En iOS el `click` fantasma llega hasta ~300ms
+        // después del touchend, así que el reset va con delay, no inmediato.
+        let _submitting = false;
+
         function submitFinal() {
+            if (_submitting) return;
+            _submitting = true;
+            const saveBtn = document.getElementById('saveBtn');
+            if (saveBtn) saveBtn.disabled = true;
+            setTimeout(() => {
+                _submitting = false;
+                if (saveBtn) saveBtn.disabled = false;
+            }, 800);
+
             currentTx.desc = document.getElementById('descInput').value;
             const txDate = document.getElementById('txDate').value || new Date().toISOString().slice(0, 10);
             const payMethod = currentTx.paymentMethod || '';
@@ -1565,7 +1790,7 @@
             TRANSACTIONS = TRANSACTIONS.concat(txsToCommit);
             if (!IS_DEMO) localStorage.setItem('FINANZAS_CACHE', JSON.stringify(TRANSACTIONS));
             processHistory();
-            inputVal = ""; document.getElementById('displayAmount').innerText = "0";
+            inputVal = ""; setAmountDisplay("0");
             successEffects();
 
             // Sync en background (no bloquea UI)
@@ -1594,19 +1819,113 @@
             catch (e) { /* quota / private mode */ }
         }
 
-        // Cola de intents de POST que están pendientes de sincronizar
-        let PENDING_QUEUE = JSON.parse(localStorage.getItem('FINANZAS_PENDING') || '[]');
+        // Cola de intents de POST que están pendientes de sincronizar.
+        // OJO: se RELEE de localStorage antes y después de cada await. Es un
+        // recurso compartido entre pestañas: mantenerla solo en memoria hacía
+        // que una pestaña con estado viejo resucitara ítems que otra ya drenó.
+        let PENDING_QUEUE = _loadQueue();
         let PENDING_SYNC = 0;
-        let SYNC_RUNNING = false; // mutex para evitar reentrancia
+        let SYNC_RUNNING = false; // mutex para evitar reentrancia (fallback sin Web Locks)
         let SYNC_PENDING_TRIGGER = false; // si llaman mientras corre, marcar para procesar después
+        let _retryTimer = null;
 
-        function savePendingQueue() {
-            localStorage.setItem('FINANZAS_PENDING', JSON.stringify(PENDING_QUEUE));
+        function _loadQueue() {
+            try { return JSON.parse(localStorage.getItem('FINANZAS_PENDING') || '[]'); }
+            catch (e) { return []; }
+        }
+
+        function _saveQueue(q) {
+            PENDING_QUEUE = q;
+            try { localStorage.setItem('FINANZAS_PENDING', JSON.stringify(q)); }
+            catch (e) { /* quota / private mode */ }
+        }
+
+        function savePendingQueue() { _saveQueue(PENDING_QUEUE); }
+
+        // Un solo timer de reintento vivo a la vez. Antes se armaba un setTimeout
+        // por cada intento fallido y se iban apilando: 5 fallos = 5 flushes
+        // encolados que corrían todos.
+        function scheduleRetry(delayMs) {
+            if (_retryTimer) return;
+            _retryTimer = setTimeout(() => { _retryTimer = null; processPendingQueue(); }, delayMs);
+        }
+
+        // Otra pestaña drenó la cola: refrescar el indicador para no mostrar
+        // pendientes que ya se fueron.
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'FINANZAS_PENDING') {
+                PENDING_QUEUE = _loadQueue();
+                updatePendingIndicator();
+            }
+        });
+
+        /**
+         * POST al Apps Script con respuesta LEGIBLE.
+         *
+         * Por qué no `mode:'no-cors'` (que era lo que había): el header
+         * 'Content-Type: application/json' NO está en la lista safelisted de
+         * CORS, así que dispara un preflight OPTIONS que Apps Script no sabe
+         * responder. La salida fácil era no-cors, pero eso vuelve la respuesta
+         * opaca: no se puede distinguir "se guardó" de "falló", y el retry
+         * terminaba escribiendo la misma fila 2 a 5 veces.
+         *
+         * Con 'text/plain;charset=utf-8' (safelisted) el request es simple, no
+         * hay preflight, y la respuesta se lee. En el .gs no cambia nada:
+         * e.postData.contents sigue trayendo el JSON crudo.
+         *
+         * Devuelve {status: 'ok'|'fatal'|'transient'}:
+         *   ok        → confirmado por el servidor, sacar de la cola
+         *   fatal     → el servidor lo rechazó (tipo/monto inválido). Reintentar
+         *               no lo arregla: va a dead-letter.
+         *   transient → red, timeout o respuesta ilegible. Reintentar es seguro
+         *               porque el servidor ahora deduplica por uid.
+         */
+        const POST_TIMEOUT_MS = 15000;
+
+        async function apiPost(payload) {
+            const ac = new AbortController();
+            const timer = setTimeout(() => ac.abort(), POST_TIMEOUT_MS);
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload),
+                    signal: ac.signal,
+                    redirect: 'follow'   // 302 → script.googleusercontent.com
+                });
+                const txt = await res.text();
+                let data = null;
+                try { data = JSON.parse(txt); } catch (e) { /* página HTML de error de Google */ }
+                if (data && data.ok) return { status: 'ok', data };
+                if (data && data.error) {
+                    // `retriable` lo marca el servidor. Un lock ocupado (dos
+                    // dispositivos guardando a la vez) o un token mal
+                    // configurado son transitorios: tratarlos como fatales
+                    // tiraría la transacción a la basura por algo que se
+                    // arreglaba solo reintentando.
+                    return { status: data.retriable ? 'transient' : 'fatal', error: data.error };
+                }
+                return { status: 'transient', error: 'respuesta ilegible (' + res.status + ')' };
+            } catch (e) {
+                return { status: 'transient', error: String(e) };
+            } finally {
+                clearTimeout(timer);
+            }
         }
 
         function updatePendingIndicator() {
             const syncBtn = document.getElementById('syncBtn');
             if (!syncBtn) return;
+            const fallidas = _deadLetterCount();
+            if (fallidas > 0) {
+                // Rojo y explícito: si algo no subió, el usuario tiene que
+                // enterarse y tener cómo reintentarlo.
+                syncBtn.innerHTML = `<span aria-hidden="true">⚠️</span><span aria-hidden="true">${fallidas}</span>`;
+                syncBtn.style.color = 'var(--secondary)';
+                syncBtn.setAttribute('aria-label',
+                    `${fallidas} ${fallidas === 1 ? 'movimiento no subió' : 'movimientos no subieron'}. Tocá para reintentar`);
+                return;
+            }
             const total = PENDING_SYNC + PENDING_QUEUE.length;
             if (total > 0) {
                 syncBtn.innerHTML = `<span aria-hidden="true">⏳</span><span aria-hidden="true">${total}</span>`;
@@ -1622,111 +1941,163 @@
         function enqueueSync(txs) {
             // txs puede ser una tx sola o un array (para extracción dual)
             const batch = Array.isArray(txs) ? txs : [txs];
-            PENDING_QUEUE.push({ id: Date.now() + Math.random(), txs: batch, attempts: 0 });
-            savePendingQueue();
+            const q = _loadQueue();
+            q.push({ id: Date.now() + Math.random(), txs: batch, attempts: 0 });
+            _saveQueue(q);
             updatePendingIndicator();
             processPendingQueue();
         }
 
         async function processPendingQueue() {
             if (!API_URL) return;
-            // Mutex: si ya hay otra ejecución, marcar y salir
+            // Web Locks serializa entre PESTAÑAS del mismo dispositivo. Entre
+            // dispositivos distintos no hay lock que valga: ahí la garantía es
+            // el uid del lado del servidor. Esto es higiene, no correctitud.
+            if (navigator.locks && navigator.locks.request) {
+                return navigator.locks.request('finanzas-sync', () => _drainQueue());
+            }
             if (SYNC_RUNNING) { SYNC_PENDING_TRIGGER = true; return; }
             SYNC_RUNNING = true;
-            try { await _processPendingQueueInner(); }
+            try { await _drainQueue(); }
             finally {
                 SYNC_RUNNING = false;
-                // Si llegaron triggers durante la ejecución, reprocesar
-                if (SYNC_PENDING_TRIGGER) {
-                    SYNC_PENDING_TRIGGER = false;
-                    setTimeout(() => processPendingQueue(), 0);
-                }
+                if (SYNC_PENDING_TRIGGER) { SYNC_PENDING_TRIGGER = false; scheduleRetry(0); }
             }
         }
 
-        async function _processPendingQueueInner() {
-            while (PENDING_QUEUE.length > 0) {
-                const item = PENDING_QUEUE[0];
+        // Traduce una tx local al formato que espera el Apps Script.
+        // El `uid` es LA pieza que mata los duplicados: viaja al servidor, que
+        // lo usa como clave de idempotencia. Antes se generaba y se usaba solo
+        // localmente, así que el servidor no tenía forma de saber que un
+        // reintento era el mismo movimiento.
+        function _toWire(tx) {
+            return {
+                uid: tx._uid || '',
+                date: tx.d, type: tx.t, category: tx.c, subcategory: tx.s,
+                amount: tx.a, description: tx.desc, paymentMethod: tx.p || ''
+            };
+        }
+
+        function _clearOptimistic(txs) {
+            txs.forEach(tx => {
+                let idx = -1;
+                if (tx._uid) idx = OPTIMISTIC_TXS.findIndex(t => t && t._uid === tx._uid);
+                if (idx === -1) idx = OPTIMISTIC_TXS.indexOf(tx);
+                if (idx !== -1) OPTIMISTIC_TXS.splice(idx, 1);
+            });
+            saveOptimisticTxs();
+        }
+
+        // Dead-letter: un intent que no se pudo mandar NO se tira. Antes se
+        // sacaba de la cola pero se dejaba en OPTIMISTIC_TXS, así que quedaba
+        // como fantasma local: visible en la UI, imposible de borrar o editar,
+        // y nunca llegaba al sheet. El usuario lo veía, creía que no se había
+        // guardado, y lo volvía a cargar a mano — otro duplicado.
+        function _pushDeadLetter(item, err) {
+            try {
+                const dl = JSON.parse(localStorage.getItem('FINANZAS_FAILED') || '[]');
+                dl.push({ ...item, error: String(err), at: new Date().toISOString() });
+                localStorage.setItem('FINANZAS_FAILED', JSON.stringify(dl));
+            } catch (e) { /* quota */ }
+            // Marcar las tx como fallidas para que _txIsPendingSync deje de
+            // bloquearlas: si no, quedan visibles en la UI, sin llegar nunca al
+            // sheet y SIN PODER BORRARSE. Se dejan a la vista a propósito —
+            // sacarlas sería perder el registro en silencio.
+            (item.txs || []).forEach(tx => {
+                const t = OPTIMISTIC_TXS.find(o => o && tx._uid && o._uid === tx._uid);
+                if (t) t._failed = true;
+            });
+            saveOptimisticTxs();
+        }
+
+        // ¿Hay transacciones que quedaron sin poder subirse?
+        function _deadLetterCount() {
+            try { return JSON.parse(localStorage.getItem('FINANZAS_FAILED') || '[]').length; }
+            catch (e) { return 0; }
+        }
+
+        // Reintento manual de todo lo que quedó en el dead-letter (lo dispara el
+        // botón 🔄 cuando hay fallidas). Sin esto, el dead-letter se escribe y
+        // nadie lo lee nunca: las tx que caen ahí serían irrecuperables.
+        function reintentarFallidas() {
+            let dl;
+            try { dl = JSON.parse(localStorage.getItem('FINANZAS_FAILED') || '[]'); }
+            catch (e) { return 0; }
+            if (!dl.length) return 0;
+            localStorage.removeItem('FINANZAS_FAILED');
+            const q = _loadQueue();
+            dl.forEach(item => {
+                (item.txs || []).forEach(tx => {
+                    const t = OPTIMISTIC_TXS.find(o => o && tx._uid && o._uid === tx._uid);
+                    if (t) delete t._failed;
+                });
+                q.push({ id: Date.now() + Math.random(), txs: item.txs, attempts: 0 });
+            });
+            saveOptimisticTxs();
+            _saveQueue(q);
+            updatePendingIndicator();
+            processPendingQueue();
+            return dl.length;
+        }
+
+        async function _drainQueue() {
+            let q = _loadQueue();
+            while (q.length > 0) {
+                const item = q[0];
                 PENDING_SYNC++;
                 updatePendingIndicator();
+                let r;
                 try {
-                    // Si el batch tiene 2+ tx (transferencia dual), usar addTransactions
-                    // (atómico en el Apps Script v2). Si tiene 1, usar addTransaction
-                    // singular (compatible con script viejo también).
-                    if (item.txs.length >= 2) {
-                        await fetch(API_URL, {
-                            method: 'POST', mode: 'no-cors',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                action: 'addTransactions',
-                                token: API_TOKEN,
-                                txs: item.txs.map(tx => ({
-                                    date: tx.d,
-                                    type: tx.t,
-                                    category: tx.c,
-                                    subcategory: tx.s,
-                                    amount: tx.a,
-                                    description: tx.desc,
-                                    paymentMethod: tx.p || ''
-                                }))
-                            })
-                        });
-                    } else {
-                        const tx = item.txs[0];
-                        await fetch(API_URL, {
-                            method: 'POST', mode: 'no-cors',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                action: 'addTransaction',
-                                token: API_TOKEN,
-                                date: tx.d,
-                                type: tx.t,
-                                category: tx.c,
-                                subcategory: tx.s,
-                                amount: tx.a,
-                                description: tx.desc,
-                                paymentMethod: tx.p || ''
-                            })
-                        });
-                    }
-                    // Éxito asumido (no-cors no permite leer respuesta)
-                    PENDING_QUEUE.shift();
-                    // Quitar estas tx del buffer optimistic (ya están en el sheet).
-                    // Matcheamos por _uid (estable) si existe, sino por referencia.
-                    item.txs.forEach(tx => {
-                        let idx = -1;
-                        if (tx._uid) {
-                            idx = OPTIMISTIC_TXS.findIndex(t => t && t._uid === tx._uid);
-                        }
-                        if (idx === -1) idx = OPTIMISTIC_TXS.indexOf(tx);
-                        if (idx !== -1) OPTIMISTIC_TXS.splice(idx, 1);
-                    });
-                    saveOptimisticTxs();
-                    savePendingQueue();
-                } catch (e) {
-                    console.error('Sync error:', e);
-                    item.attempts = (item.attempts || 0) + 1;
-                    savePendingQueue();
-                    if (item.attempts >= 5) {
-                        // Después de 5 intentos la sacamos para que no bloquee toda la cola
-                        PENDING_QUEUE.shift();
-                        savePendingQueue();
-                        const t = document.getElementById('toast');
-                        t.innerText = '⚠️ Transacción no pudo sincronizarse';
-                        t.style.color = 'var(--secondary)';
-                        t.style.display = 'block';
-                        setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 4000);
-                    } else {
-                        // Backoff exponencial: 2^attempts segundos (2, 4, 8, 16, 32)
-                        const delayMs = Math.min(30000, 1000 * Math.pow(2, item.attempts));
-                        setTimeout(() => processPendingQueue(), delayMs);
-                    }
-                    break; // Cortar el loop para reintentar después
+                    const payload = item.txs.length >= 2
+                        ? { action: 'addTransactions', token: API_TOKEN, txs: item.txs.map(_toWire) }
+                        : Object.assign({ action: 'addTransaction', token: API_TOKEN },
+                                        _toWire(item.txs[0]));
+                    r = await apiPost(payload);
                 } finally {
                     PENDING_SYNC--;
                     updatePendingIndicator();
                 }
+
+                // Releer DESPUÉS del await: otra pestaña pudo haber drenado la
+                // cola mientras esperábamos. Solo hacemos shift si la cabeza
+                // sigue siendo nuestro ítem.
+                q = _loadQueue();
+                const mine = q.length > 0 && q[0].id === item.id;
+
+                if (r.status === 'ok') {
+                    if (mine) { q.shift(); _saveQueue(q); }
+                    _clearOptimistic(item.txs);
+                } else if (r.status === 'fatal') {
+                    // El servidor lo rechazó por validación: reintentar no lo arregla.
+                    // No cortamos el loop: el resto de la cola sí puede irse.
+                    if (mine) { q.shift(); _saveQueue(q); }
+                    _pushDeadLetter(item, r.error);
+                    _toastSync('⚠️ Rechazado por el servidor: ' + r.error);
+                } else {
+                    item.attempts = (item.attempts || 0) + 1;
+                    if (mine) { q[0] = item; _saveQueue(q); }
+                    // 8 intentos, no 5: ahora reintentar es SEGURO porque el
+                    // servidor deduplica por uid.
+                    if (item.attempts >= 8) {
+                        if (mine) { q.shift(); _saveQueue(q); }
+                        _pushDeadLetter(item, r.error);
+                        _toastSync('⚠️ No se pudo subir. Tocá 🔄 para reintentar.');
+                        continue;   // el resto de la cola sí puede irse
+                    }
+                    scheduleRetry(Math.min(60000, 1000 * Math.pow(2, item.attempts)));
+                    break;          // sin conexión: no tiene sentido seguir
+                }
             }
+            updatePendingIndicator();
+        }
+
+        function _toastSync(msg) {
+            const t = document.getElementById('toast');
+            if (!t) return;
+            t.innerText = msg;
+            t.style.color = 'var(--secondary)';
+            t.style.display = 'block';
+            setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 5000);
         }
 
         // Reintentar la cola automáticamente cuando el dispositivo vuelve a estar online.
@@ -1750,6 +2121,7 @@
 
         // Marker para distinguir filas de configuración de transacciones reales
         const CONFIG_MARKER = '__CONFIG__';
+        let _avisoConfigDado = false;   // el aviso de config dañada va 1 vez por sesión
 
         // Extrae filas de config del raw, aplica la más reciente y devuelve las transacciones limpias
         function extractConfig(raw) {
@@ -1773,53 +2145,103 @@
                 }
             });
 
-            // Ordenar config rows por fecha desc y quedarse con la primera de cada tipo
-            configRows.sort((a, b) => String(b.d || '').localeCompare(String(a.d || '')));
+            // Orden ASCENDENTE y "gana el último".
+            // Antes se ordenaba desc y se tomaba el primero, pero el backend
+            // trunca la fecha a yyyy-MM-dd: dos guardados el mismo día empatan,
+            // y con un sort estable el empate conservaba el orden del sheet →
+            // ganaba la config MÁS VIEJA del día.
+            configRows.sort((a, b) => String(a.d || '').localeCompare(String(b.d || '')));
             const latest = { schema: null, aliases: null };
             for (const r of configRows) {
-                if (r.c === 'schema' && !latest.schema) latest.schema = r;
-                if (r.c === 'aliases' && !latest.aliases) latest.aliases = r;
-                if (latest.schema && latest.aliases) break;
+                if (r.c === 'schema') latest.schema = r;
+                if (r.c === 'aliases') latest.aliases = r;
             }
 
+            // El aviso va UNA vez por sesión. La fila de config rota queda rota
+            // en el sheet hasta que alguien guarde una nueva, así que avisar en
+            // cada fetchSync sería un toast permanente e inútil que además tapa
+            // los mensajes que sí importan.
             if (latest.schema) {
                 try {
-                    SCHEMA = JSON.parse(atob(latest.schema.desc || ''));
+                    SCHEMA = JSON.parse(b64ToJson(latest.schema.desc || ''));
                     localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
-                } catch (e) { console.warn('Config schema corrupta:', e); }
+                } catch (e) {
+                    console.warn('Config schema corrupta:', e);
+                    // NO silencioso: esta falla dejó las categorías sin sincronizar
+                    // entre dispositivos durante 7 semanas sin que nadie se enterara.
+                    // OJO: no se pisa el SCHEMA local — se conserva el que ya
+                    // había, que es mejor que volver al default.
+                    if (!_avisoConfigDado) {
+                        _avisoConfigDado = true;
+                        _toastSync('⚠️ Las categorías del servidor están dañadas. '
+                                 + 'Guardá tus categorías desde ⚙️ para repararlas.');
+                    }
+                }
             }
             if (latest.aliases) {
                 try {
-                    ALIASES = JSON.parse(atob(latest.aliases.desc || ''));
+                    ALIASES = JSON.parse(b64ToJson(latest.aliases.desc || ''));
                     localStorage.setItem('FINANZAS_ALIASES', JSON.stringify(ALIASES));
-                } catch (e) { console.warn('Config aliases corrupta:', e); }
+                } catch (e) {
+                    console.warn('Config aliases corrupta:', e);
+                }
             }
             return txs;
         }
 
+        /* --- Serialización de config: base64 seguro con UTF-8 ---
+         *
+         * btoa()/atob() trabajan sobre bytes latin-1. Con "Alimentación" el
+         * resultado guardaba 0xF3 suelto (acento roto al volver) y con un emoji
+         * en el nombre de una categoría btoa() directamente tira excepción.
+         * Estas dos funciones pasan por TextEncoder/TextDecoder.
+         */
+        function jsonToB64(obj) {
+            const bytes = new TextEncoder().encode(JSON.stringify(obj));
+            let bin = '';
+            bytes.forEach(b => { bin += String.fromCharCode(b); });
+            return btoa(bin);
+        }
+
+        function b64ToJson(b64) {
+            const bin = atob(b64);
+            const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+            try {
+                return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+            } catch (e) {
+                // Retrocompat: las filas escritas por la versión vieja están en
+                // latin-1. Se leen igual y quedan bien al próximo guardado.
+                return new TextDecoder('latin1').decode(bytes);
+            }
+        }
+
         // Guarda una config (schema o aliases) como fila especial en el sheet
         async function saveConfigToSheet(kind, data) {
+            const lsKey = kind === 'schema' ? 'FINANZAS_SCHEMA' : 'FINANZAS_ALIASES';
             if (!API_URL) {
-                // En modo local, solo localStorage
-                localStorage.setItem(kind === 'schema' ? 'FINANZAS_SCHEMA' : 'FINANZAS_ALIASES', JSON.stringify(data));
+                // Modo demo (portafolio público): NO se persiste. Si se guardara
+                // en la misma clave que usa el modo real, el día que alguien
+                // configure la API en ese mismo navegador arrancaría con las
+                // categorías anonimizadas del demo — y al guardar las subiría
+                // al sheet de la familia.
                 return;
             }
-            const encoded = btoa(JSON.stringify(data));
-            await fetch(API_URL, {
-                method: 'POST', mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'addTransaction',
-                    token: API_TOKEN,
-                    date: new Date().toISOString(),
-                    type: CONFIG_MARKER,
-                    category: kind, // 'schema' o 'aliases'
-                    subcategory: '',
-                    amount: 0,
-                    description: encoded
-                })
+            const r = await apiPost({
+                action: 'addTransaction',
+                token: API_TOKEN,
+                uid: 'cfg_' + kind + '_' + Date.now().toString(36),
+                date: new Date().toISOString(),
+                type: CONFIG_MARKER,
+                category: kind, // 'schema' o 'aliases'
+                subcategory: '',
+                amount: 0,
+                description: jsonToB64(data)
             });
-            localStorage.setItem(kind === 'schema' ? 'FINANZAS_SCHEMA' : 'FINANZAS_ALIASES', JSON.stringify(data));
+            localStorage.setItem(lsKey, JSON.stringify(data));
+            if (r.status !== 'ok') {
+                _toastSync('⚠️ La config quedó guardada en este dispositivo pero no se subió');
+            }
+            return r;
         }
 
         async function fetchSync() {
@@ -1828,19 +2250,69 @@
                 const tokenQs = API_TOKEN ? `&token=${encodeURIComponent(API_TOKEN)}` : '';
                 const res = await fetch(`${API_URL}?action=getRawData${tokenQs}`);
                 const raw = await res.json();
+
+                // El servidor contesta 200 con {error} en vez de un array.
+                // Sin este chequeo, `raw.forEach` explotaba adentro del catch
+                // genérico y el usuario veía "Error al sincronizar" sin pista
+                // de qué hacer — justo en el modo de falla más probable, que es
+                // el token mal configurado.
+                if (!Array.isArray(raw)) {
+                    const err = (raw && raw.error) || 'respuesta inesperada';
+                    if (/unauthorized/i.test(err)) {
+                        _toastSync('🔑 El token de acceso no coincide. Revisalo en ⚙️.');
+                    } else if (/SECRET_TOKEN/i.test(err)) {
+                        _toastSync('🔑 Falta configurar el token en el servidor.');
+                    } else {
+                        _toastSync('⚠️ El servidor respondió: ' + err);
+                    }
+                    console.warn('fetchSync:', err);
+                    return false;
+                }
+
                 // Extraer configuración y separar transacciones reales
                 const cleanTxs = extractConfig(raw);
 
-                // Reinyectar tx optimistas que aún no llegaron al server
-                // (evita que desaparezcan del UI mientras están en la cola).
-                // Dedupe por (d,t,c,s,a,desc): si una tx optimista ya aparece
-                // en el sheet no la volvemos a reinyectar. Esto cierra el agujero
-                // donde reinicios dejaban tx duplicadas.
+                // ¿Qué transacciones ya aterrizaron en el sheet?
+                const sigOf = (t) => `${t.d}|${t.t}|${t.c}|${t.s}|${t.a}|${t.desc}`;
+                const sheetUids = new Set(cleanTxs.map(t => t.u).filter(Boolean));
+                const sheetSigs = new Set(cleanTxs.map(sigOf));
+
+                // Dos criterios, y la diferencia entre ellos importa MUCHO:
+                //
+                //   por uid    → certeza. Esta transacción exacta está en el sheet.
+                //   por firma  → conjetura. Hay una fila que se le PARECE (misma
+                //                fecha/tipo/categoría/monto/descripción), pero
+                //                puede ser un gasto distinto que da igual: en
+                //                estos datos "Niñera $8000" el mismo día pasa
+                //                de verdad.
+                const landedPorUid = (t) => !!(t._uid && sheetUids.has(t._uid));
+                const landedPorFirma = (t) => sheetSigs.has(sigOf(t));
+
+                // 1) Purgar la COLA — SOLO por uid.
+                //    Antes el dedupe vivía únicamente en el buffer optimista, o
+                //    sea en la capa equivocada: el intent seguía en la cola y su
+                //    reintento volvía a escribir la fila.
+                //    Pero purgar la cola por FIRMA sería peor que el bug original:
+                //    si cargás un gasto idéntico a uno que ya está en el sheet,
+                //    su intent se descartaría antes de mandarse y el movimiento
+                //    NO SE GUARDARÍA NUNCA, en silencio. Preferimos el riesgo de
+                //    un duplicado (visible y arreglable) al de una pérdida muda.
+                //    `.every` y no `.some`: si de una extracción dual aterrizó
+                //    solo una, el intent se mantiene y el servidor saltea por uid
+                //    la que ya está.
+                const q0 = _loadQueue();
+                const q1 = q0.filter(item => !(item.txs || []).every(landedPorUid));
+                if (q1.length !== q0.length) { _saveQueue(q1); updatePendingIndicator(); }
+
+                // 2) Purgar el buffer optimista y reinyectar lo que sigue pendiente
+                //    (evita que desaparezca del UI mientras está en la cola).
+                //    Acá SÍ vale la firma: este buffer es solo presentación, y
+                //    equivocarse cuesta que una fila parpadee hasta el próximo
+                //    sync, no que se pierda.
                 let merged = cleanTxs;
                 if (OPTIMISTIC_TXS.length > 0) {
-                    const sigOf = (t) => `${t.d}|${t.t}|${t.c}|${t.s}|${t.a}|${t.desc}`;
-                    const sheetSigs = new Set(cleanTxs.map(sigOf));
-                    const stillPending = OPTIMISTIC_TXS.filter(t => !sheetSigs.has(sigOf(t)));
+                    const stillPending = OPTIMISTIC_TXS.filter(
+                        t => !(landedPorUid(t) || landedPorFirma(t)));
                     if (stillPending.length !== OPTIMISTIC_TXS.length) {
                         OPTIMISTIC_TXS = stillPending;
                         saveOptimisticTxs();
@@ -1873,6 +2345,10 @@
         }
 
         function _txIsPendingSync(tx) {
+            // Una tx que ya falló definitivamente NO está pendiente: está muerta.
+            // Tratarla como pendiente la volvía imposible de borrar o editar, y
+            // quedaba de fantasma para siempre.
+            if (tx && tx._failed) return false;
             // Busca si la tx sigue en la cola de pending (no llegó al sheet todavía).
             // Match por _uid si existe, sino por referencia (tx cargadas del sheet no tienen uid).
             if (tx && tx._uid) {
@@ -1912,21 +2388,21 @@
             _rerenderActiveView();
 
             if (API_URL) {
-                try {
-                    await fetch(API_URL, {
-                        method: 'POST', mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            action: 'deleteTransaction',
-                            token: API_TOKEN,
-                            signature: signature
-                        })
-                    });
-                    // Reconciliar con el server para detectar si el match no existió
-                    setTimeout(() => fetchSync(), 1200);
-                } catch (e) {
-                    console.error('Delete sync error:', e);
+                const r = await apiPost({
+                    action: 'deleteTransaction',
+                    token: API_TOKEN,
+                    signature: signature,
+                    uid: tx.u || tx._uid || ''   // exacto; la firma queda de fallback legacy
+                });
+                if (r.status === 'ok' && r.data && r.data.deleted === 0) {
+                    // Antes esto era silencio total: la fila seguía en el sheet y
+                    // volvía a aparecer en el próximo fetchSync sin explicación.
+                    _toast('⚠️ No se encontró esa fila en el sheet', true);
+                } else if (r.status !== 'ok') {
+                    _toast('⚠️ No se pudo borrar del sheet: ' + (r.error || ''), true);
                 }
+                // Reconciliar solo si el server confirmó
+                if (r.status === 'ok') setTimeout(() => fetchSync(), 1200);
             }
             return true;
         }
@@ -1937,6 +2413,7 @@
                 return false;
             }
             const signature = _txSignature(tx);
+            const uid = tx.u || tx._uid || '';
             // Aplicar cambios locales primero
             Object.keys(changes).forEach(k => { tx[k] = changes[k]; });
             processHistory();
@@ -1944,21 +2421,19 @@
             _rerenderActiveView();
 
             if (API_URL) {
-                try {
-                    await fetch(API_URL, {
-                        method: 'POST', mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            action: 'updateTransaction',
-                            token: API_TOKEN,
-                            signature: signature,
-                            changes: changes
-                        })
-                    });
-                    setTimeout(() => fetchSync(), 1200);
-                } catch (e) {
-                    console.error('Update sync error:', e);
+                const r = await apiPost({
+                    action: 'updateTransaction',
+                    token: API_TOKEN,
+                    signature: signature,
+                    changes: changes,
+                    uid: uid
+                });
+                if (r.status === 'ok' && r.data && r.data.updated === 0) {
+                    _toast('⚠️ No se encontró esa fila en el sheet', true);
+                } else if (r.status !== 'ok') {
+                    _toast('⚠️ No se pudo editar en el sheet: ' + (r.error || ''), true);
                 }
+                if (r.status === 'ok') setTimeout(() => fetchSync(), 1200);
             }
             return true;
         }
@@ -2178,13 +2653,27 @@
 
         async function forceRefresh() {
             showLoader();
-            // Primero reintentar la cola pendiente
-            await processPendingQueue();
-            const ok = await fetchSync();
-            hideLoader();
+            let ok = false;
+            let reintentadas = 0;
+            try {
+                // Si hay movimientos que no pudieron subirse, este botón es su
+                // segunda oportunidad: sin esto el dead-letter no lo lee nadie.
+                reintentadas = reintentarFallidas();
+                // Después, la cola normal
+                await processPendingQueue();
+                ok = await fetchSync();
+            } catch (e) {
+                console.error('forceRefresh:', e);
+            } finally {
+                // En finally: si processPendingQueue rechaza (p.ej. el Web Lock),
+                // el loader quedaba tapando la app para siempre.
+                hideLoader();
+            }
             const t = document.getElementById('toast');
-            t.innerText = ok ? "Sincronizado" : "⚠️ Error al sincronizar";
-            t.style.color = ok ? '' : 'var(--secondary)';
+            t.innerText = reintentadas > 0
+                ? `Reintentando ${reintentadas} ${reintentadas === 1 ? 'movimiento' : 'movimientos'}…`
+                : (ok ? "Sincronizado" : "⚠️ Error al sincronizar");
+            t.style.color = ok || reintentadas > 0 ? '' : 'var(--secondary)';
             t.style.display = 'block';
             setTimeout(() => { t.style.display = 'none'; t.style.color = ''; }, 3000);
         }
@@ -2443,7 +2932,7 @@
                 const a = parseFloat(inputVal);
                 if (inputVal && !isNaN(a) && a > 0) startTx('Ingreso');
             } else if (key === 'Escape') {
-                e.preventDefault(); inputVal = ''; document.getElementById('displayAmount').innerText = '0';
+                e.preventDefault(); inputVal = ''; setAmountDisplay('0');
             }
         });
 
@@ -3395,11 +3884,23 @@
         async function saveConfig() {
             showLoader();
             try {
-                await saveConfigToSheet('schema', SCHEMA);
-                await saveConfigToSheet('aliases', ALIASES);
+                const r1 = await saveConfigToSheet('schema', SCHEMA);
+                const r2 = await saveConfigToSheet('aliases', ALIASES);
                 // Re-procesar con nuevas categorías/aliases
                 processHistory();
                 hideLoader();
+                // Si algo no subió, decirlo. Antes se mostraba "Configuración
+                // guardada" igual, pisando el aviso de fallo: el usuario creía
+                // que había sincronizado cuando solo quedó en este dispositivo.
+                const falló = [r1, r2].some(r => r && r.status && r.status !== 'ok');
+                if (falló) {
+                    await uiAlert(
+                        'Se guardó en este dispositivo, pero no se pudo subir al servidor. '
+                        + 'Los otros dispositivos todavía no la ven. Probá de nuevo con 🔄.',
+                        'Guardado solo local');
+                    return;
+                }
+                if (API_URL) _avisoConfigDado = false;   // la config del sheet ya está sana
                 const t = document.getElementById('toast');
                 t.innerText = 'Configuración guardada';
                 t.style.display = 'block';
