@@ -1,16 +1,26 @@
 /**
  * Finanzas V6.2 — Google Apps Script backend (v3)
  *
- * IMPORTANTE - SETEAR ANTES DE DESPLEGAR:
- *   Generá un token random en https://www.uuidgenerator.net/ y pegalo en
- *   SECRET_TOKEN. El frontend lo envía en cada request. Si el token no
- *   coincide, el script rechaza la operación. Esto cierra el agujero de
- *   "el link es la única llave".
+ * EL TOKEN NO ESTÁ EN ESTE ARCHIVO, Y ES A PROPÓSITO.
  *
- * ROTACIÓN: si el link/QR leakea, generá un token nuevo, peguálo acá,
- *   redeplegá, y actualizá el token en cada dispositivo desde la app.
+ * Vive en las Propiedades del script (Configuración del proyecto →
+ * Propiedades del script → SECRET_TOKEN). Antes era una constante acá, con un
+ * placeholder en el repo y el valor real solo en el editor: como el
+ * procedimiento de despliegue es "seleccioná todo y reemplazá", pegar este
+ * archivo pisaba el token real con el placeholder — y checkAuth_ tenía un modo
+ * permisivo justo para ese placeholder, así que la autenticación se apagaba
+ * EN SILENCIO y cualquiera con la URL quedaba con acceso de lectura y
+ * escritura a la planilla familiar.
+ *
+ * Con el token afuera del código, pegar el archivo entero ya no puede
+ * romperlo. Y si no está configurado, el script RECHAZA todo en vez de dejar
+ * pasar: fallar cerrado se detecta en el primer uso, fallar abierto no se
+ * detecta nunca.
+ *
+ * SETUP (una sola vez): ver setupToken_ y migrarTokenAPropiedades más abajo.
+ * ROTACIÓN: cambiar el valor de la propiedad SECRET_TOKEN y actualizarlo en
+ *   cada dispositivo desde ⚙️ de la app. No hace falta redesplegar.
  */
-const SECRET_TOKEN = 'CAMBIAR-POR-UN-TOKEN-RANDOM-DE-32-CHARS';
 
 const VALID_TYPES = ['Ingreso', 'Egreso', '__CONFIG__'];
 const MAX_BATCH = 50;
@@ -361,6 +371,26 @@ function updateTransaction(sig, changes, uid) {
 
 /* ---------- Auth ---------- */
 
+/** El token vigente, desde las Propiedades del script. Nunca desde el código. */
+function getToken_() {
+  return String(PropertiesService.getScriptProperties()
+                  .getProperty('SECRET_TOKEN') || '').trim();
+}
+
+/**
+ * Comparación en tiempo constante.
+ *
+ * Un `!==` sobre strings corta en el primer carácter distinto, así que el
+ * tiempo de respuesta filtra cuántos caracteres del token acertaste. Con un
+ * endpoint público eso es adivinable. El costo de hacerlo bien es nulo.
+ */
+function tokensIguales_(a, b) {
+  if (a.length !== b.length) return false;
+  let dif = 0;
+  for (let i = 0; i < a.length; i++) dif |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return dif === 0;
+}
+
 function checkAuth_(e) {
   // El token puede venir por query (GET) o en el body JSON (POST)
   let token = '';
@@ -371,12 +401,60 @@ function checkAuth_(e) {
       if (body && body.token) token = body.token;
     } catch (err) {}
   }
-  if (!SECRET_TOKEN || SECRET_TOKEN === 'CAMBIAR-POR-UN-TOKEN-RANDOM-DE-32-CHARS') {
-    // Token no configurado: permitir (modo migración)
-    return true;
+  const esperado = getToken_();
+  if (!esperado) {
+    // FALLA CERRADO. La versión anterior hacía lo contrario —"token no
+    // configurado: permitir (modo migración)"— y ese modo permisivo es
+    // justamente lo que convertía un despliegue mal hecho en un sheet
+    // familiar abierto a cualquiera con la URL, sin ninguna señal.
+    // Cerrado se nota en el primer uso; abierto no se nota nunca.
+    throw new Error('SECRET_TOKEN no configurado en las Propiedades del script. '
+                  + 'Correr setupToken_() desde el editor.');
   }
-  if (token !== SECRET_TOKEN) throw new Error('Unauthorized');
+  if (!tokensIguales_(String(token), esperado)) throw new Error('Unauthorized');
   return true;
+}
+
+/* ---------- Setup del token (correr a mano, UNA vez) ---------- */
+
+/**
+ * PASO 1 DE LA MIGRACIÓN — correr esto ANTES de pegar el código nuevo.
+ *
+ * Pegá esta función sola al final del código que YA está desplegado (el que
+ * todavía tiene `const SECRET_TOKEN = '...'`) y ejecutala una vez. Copia el
+ * token vigente a las Propiedades del script sin que tengas que verlo ni
+ * copiarlo a mano.
+ *
+ *   function migrarTokenAPropiedades() {
+ *     PropertiesService.getScriptProperties()
+ *       .setProperty('SECRET_TOKEN', SECRET_TOKEN);
+ *     Logger.log('Token migrado. Largo: ' + SECRET_TOKEN.length);
+ *   }
+ *
+ * Después de correrla, ya podés pegar este archivo entero sin riesgo.
+ */
+
+/** Genera y guarda un token nuevo. Para el setup inicial o para rotar. */
+function setupToken_() {
+  const nuevo = Utilities.getUuid().replace(/-/g, '')
+              + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+  PropertiesService.getScriptProperties().setProperty('SECRET_TOKEN', nuevo);
+  Logger.log('Token nuevo guardado en las Propiedades del script:\n\n' + nuevo
+           + '\n\nCargalo en cada dispositivo desde ⚙️ de la app. '
+           + 'Hasta que lo hagas, esos dispositivos no van a poder sincronizar.');
+  return nuevo;
+}
+
+/** Verifica el estado sin revelar el token. Correr desde el editor. */
+function verificarToken_() {
+  const t = getToken_();
+  Logger.log(t
+    ? 'OK: hay un SECRET_TOKEN configurado (' + t.length + ' caracteres). '
+      + 'La autenticación está activa.'
+    : '⚠️ NO hay SECRET_TOKEN configurado. El script está rechazando TODO. '
+      + 'Correr migrarTokenAPropiedades() (si venís de la versión vieja) '
+      + 'o setupToken_() (si arrancás de cero).');
+  return !!t;
 }
 
 /* ---------- Mantenimiento (correr a mano desde el editor) ---------- */

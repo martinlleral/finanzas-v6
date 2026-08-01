@@ -55,12 +55,23 @@ El skill `/auditarfinanzas` (en `~/.claude/skills/auditarfinanzas/`) audita el s
 ## Tests (requieren `npm i -g playwright`)
 
 ```bash
-node tools/sync-test.js index.html       # motor de sincronización — 5/5
-node tools/layout-harness.js index.html  # layout — 0 fallas de 105 mediciones
-node tools/smoke-test.js index.html      # flujo end-to-end + calibración tipográfica
+node tools/sync-test.js index.html          # motor de sincronización — 5/5
+node tools/auth-test.js server/apps_script.gs  # autenticación — 11/11
+node tools/layout-harness.js index.html     # layout — 0 fallas de 105 mediciones
+node tools/smoke-test.js index.html         # flujo end-to-end + calibración tipográfica
 ```
 
 - **`sync-test.js`** cubre los caminos donde un bug **no se ve**: la transacción se escribe dos veces o desaparece en silencio. Mockea el servidor y verifica el estado real de la cola, el buffer optimista y los POST. Contra el código previo a la v3 pasa **1 de 5** (el primero falla con `filasEnSheet: esperaba 1, hubo 2`, que es el bug reproducido).
+- **`auth-test.js`** mockea `PropertiesService` para correr `checkAuth_` fuera de Google. Contra la versión previa pasa **2 de 11**.
 - **`layout-harness.js`**: 7 viewports × 10 vistas × 4 modales, con montos de 9 dígitos tipeados por la ruta real y stress de `$123.456.789`. **Assertion: 0 fallas.** Baseline del 31/7/2026 antes de los fixes: 105.
 
-**Correr los tres antes de tocar el motor de sync o el CSS de layout.**
+**Correr los cuatro antes de tocar el motor de sync, la auth o el CSS de layout.**
+
+## Seguridad: el token
+
+**No está en el código, y es a propósito.** Vive en las Propiedades del script (Apps Script → Configuración del proyecto → Propiedades → `SECRET_TOKEN`). Antes era una constante con un placeholder en el repo; como el despliegue es "seleccioná todo y reemplazá", pegar el archivo pisaba el token real con el placeholder — y `checkAuth_` tenía un modo permisivo justo para ese valor, así que **la autenticación se apagaba en silencio**.
+
+- `verificarToken_()` desde el editor dice si está configurado, sin revelarlo.
+- `setupToken_()` genera y guarda uno nuevo (después hay que cargarlo en cada dispositivo desde ⚙️).
+- **Falla cerrado**: sin token configurado el script rechaza todo. Es deliberado — un servidor cerrado se nota en el primer uso, uno abierto no se nota nunca. Nada se pierde: el cliente encola y reintenta.
+- Chequeo externo: `curl "<API_URL>?action=getRawData&token=BASURA"` tiene que devolver `{"error":"Unauthorized"}`.
