@@ -14,7 +14,12 @@ const SECRET_TOKEN = 'CAMBIAR-POR-UN-TOKEN-RANDOM-DE-32-CHARS';
 
 const VALID_TYPES = ['Ingreso', 'Egreso', '__CONFIG__'];
 const MAX_BATCH = 50;
-const MAX_AMOUNT = 100000000; // 100 millones, sanity check
+// Tiene que coincidir con lo que el cliente PUEDE tipear (9 dígitos en pressNum).
+// Antes el cliente aceptaba hasta 999.999.999 y el servidor cortaba en 100.000.000:
+// cualquier monto de 9 dígitos se rechazaba como error de validación y la
+// transacción terminaba descartada. Si se cambia acá, cambiar también
+// MAX_AMOUNT_CLIENTE en index.html.
+const MAX_AMOUNT = 999999999;
 const MAX_DESC_LEN = 500;
 
 // Las filas __CONFIG__ guardan el SCHEMA de la app serializado en base64 dentro
