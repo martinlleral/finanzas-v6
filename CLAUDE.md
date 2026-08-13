@@ -52,6 +52,16 @@ A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G
 ## Auditoría del dato
 El skill `/auditarfinanzas` (en `~/.claude/skills/auditarfinanzas/`) audita el sheet read-only y traduce cada hallazgo a un fix con archivo:línea. Correrlo después de cada tanda de fixes (`quick`) o una vez por mes (`deep`). Guarda un libro mayor que mide si los fixes anteriores funcionaron.
 
+**El skill LEE; los scripts de `server/` ESCRIBEN.** Esa separación es deliberada: la promesa de que `auditar.py` no puede tocar la base de datos de la familia es lo que lo hace confiable, y tiene un guard que se auto-verifica. Después de cada corrida de auditoría:
+
+```bash
+~/.venvs/facturador/bin/python server/publicar_auditoria.py --aplicar
+```
+
+Eso refresca la pestaña **`Auditoría`** del spreadsheet: las 5 advertencias para leer los datos (plata contada dos veces, montos nominales en un país con inflación alta, desde cuándo hay registro real del negocio, subregistro reciente, negocio+hogar mezclados) con los números **calculados del dato**, no escritos a mano. Más el estado del dato y el libro de fixes.
+
+Es seguro para el uso diario: escribe solo en esa pestaña, tiene un assert de que el destino no es `Movimientos`, verifica después que la hoja de datos no cambió, y la app nunca la lee (`getSheet()` busca `Movimientos` por nombre).
+
 ## Tests (requieren `npm i -g playwright`)
 
 ```bash
