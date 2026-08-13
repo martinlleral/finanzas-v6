@@ -2029,6 +2029,24 @@
             };
         }
 
+        /* ¿El servidor se hizo cargo de ESTE intent?
+         *
+         * Antes alcanzaba con que la respuesta trajera `ok`. Pero `ok` dice
+         * "la operación terminó", no "guardé lo tuyo": un `{ok:true,
+         * written:0}` sacaba el movimiento de la cola sin que existiera en
+         * ningún lado. Ahora se exige que cada uid figure escrito o salteado.
+         *
+         * Retrocompat: un servidor viejo no manda writtenUids. En ese caso se
+         * confía en `ok`, que es lo que había — no se puede hacer mejor, y
+         * bloquear la cola contra un servidor viejo sería peor.
+         */
+        function _servidorConfirmo(item, data) {
+            if (!data) return false;
+            if (!Array.isArray(data.writtenUids)) return true;   // servidor viejo
+            const ok = new Set([...(data.writtenUids || []), ...(data.skipped || [])]);
+            return item.txs.every(t => !t._uid || ok.has(t._uid));
+        }
+
         function _clearOptimistic(txs) {
             txs.forEach(tx => {
                 let idx = -1;
@@ -2097,6 +2115,15 @@
                 const item = q[0];
                 PENDING_SYNC++;
                 updatePendingIndicator();
+                // Un intent sin transacciones no puede confirmarse nunca y
+                // bloquearía la cola para siempre. No debería existir; si
+                // existe, se descarta acá y no en medio de un envío.
+                if (!Array.isArray(item.txs) || item.txs.length === 0) {
+                    q = _loadQueue();
+                    if (q.length && q[0].id === item.id) { q.shift(); _saveQueue(q); }
+                    continue;
+                }
+
                 let r;
                 try {
                     const payload = item.txs.length >= 2
@@ -2104,6 +2131,11 @@
                         : Object.assign({ action: 'addTransaction', token: API_TOKEN },
                                         _toWire(item.txs[0]));
                     r = await apiPost(payload);
+                } catch (e) {
+                    // El try tenía finally pero no catch: cualquier excepción
+                    // acá salía disparada del drenado, dejaba la cola a medias
+                    // y nadie se enteraba.
+                    r = { status: 'transient', error: String(e) };
                 } finally {
                     PENDING_SYNC--;
                     updatePendingIndicator();
@@ -2115,9 +2147,19 @@
                 q = _loadQueue();
                 const mine = q.length > 0 && q[0].id === item.id;
 
-                if (r.status === 'ok') {
+                if (r.status === 'ok' && _servidorConfirmo(item, r.data)) {
                     if (mine) { q.shift(); _saveQueue(q); }
                     _clearOptimistic(item.txs);
+                } else if (r.status === 'ok') {
+                    // Respondió ok pero NO figura nuestro uid entre lo escrito
+                    // ni entre lo salteado. No sabemos qué pasó, así que el
+                    // movimiento se queda: perder un dato es mucho peor que
+                    // reintentar de más (el uid impide que se duplique).
+                    item.attempts = (item.attempts || 0) + 1;
+                    if (mine) { q[0] = item; _saveQueue(q); }
+                    console.warn('El servidor no confirmó el uid; se mantiene en la cola', r.data);
+                    scheduleRetry(Math.min(60000, 1000 * Math.pow(2, item.attempts)));
+                    break;
                 } else if (r.status === 'fatal') {
                     // El servidor lo rechazó por validación: reintentar no lo arregla.
                     // No cortamos el loop: el resto de la cola sí puede irse.
