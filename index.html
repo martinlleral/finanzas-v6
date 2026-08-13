@@ -955,6 +955,26 @@
             </div>
         </div>
 
+        <!-- Panel de sincronización. Existe porque la cola era una caja negra:
+             un relojito con un número y nada más. Un teléfono estuvo días sin
+             cargar nada al sheet y no había forma de verlo desde la app ni de
+             sacar lo que tenía adentro. -->
+        <h3 style="color:#555; margin-bottom:10px;">🔄 Sincronización</h3>
+        <div class="neu-flat" style="padding:15px; margin-bottom:20px;">
+            <div style="font-size:0.8rem; color:#555555; margin-bottom:5px;">Nombre de este dispositivo</div>
+            <div class="list-row" style="padding:8px 0; cursor:default;">
+                <div class="row-left"><span id="cfgDeviceName" style="font-weight:600;">—</span></div>
+                <button class="neu-flat" style="padding:6px 12px; border-radius:10px; cursor:pointer; font-size:0.85rem;" onclick="renameDevice()">Cambiar</button>
+            </div>
+            <div style="font-size:0.75rem; color:#555555; margin:4px 0 14px;">Queda registrado en cada movimiento que cargues desde acá.</div>
+
+            <div id="cfgSyncEstado" style="font-size:0.9rem; margin-bottom:10px;">—</div>
+            <div id="cfgSyncDetalle" style="font-size:0.8rem; color:#555555; max-height:160px; overflow-y:auto; overflow-x:hidden; margin-bottom:12px;"></div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="reintentarPendientes()">🔄 Reintentar ahora</button>
+                <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="exportarPendientes()">💾 Bajar pendientes (CSV)</button>
+            </div>
+        </div>
 
         <h3 style="color:#555; margin-bottom:10px;">📤 Categorías de Egreso</h3>
         <div id="cfgEgresoList" class="list-container" style="padding-bottom:10px;"></div>
@@ -1137,6 +1157,28 @@
         // si no, queda vacía (modo demo para portafolio en GitHub Pages)
         const API_URL = localStorage.getItem('FINANZAS_API_URL') || '';
         const API_TOKEN = localStorage.getItem('FINANZAS_API_TOKEN') || '';
+
+        /* Nombre del dispositivo — va a la columna I de cada fila que escribe.
+           No es un adorno: cuando un teléfono deja de sincronizar, sin esto no
+           hay forma de saber desde el sheet cuál era ni desde cuándo dejó de
+           cargar. Pasó exactamente eso y nos enteramos de casualidad, días
+           después. Se puede cambiar desde ⚙️. */
+        const DEVICE_NAME = (() => {
+            let n = localStorage.getItem('FINANZAS_DEVICE');
+            if (!n) {
+                // Default legible sin preguntar nada: la app tiene que servir
+                // desde el primer toque. Se renombra después desde ⚙️.
+                const ua = navigator.userAgent;
+                const plat = /iPhone/.test(ua) ? 'iPhone'
+                           : /iPad/.test(ua) ? 'iPad'
+                           : /Android/.test(ua) ? 'Android'
+                           : /Mac/.test(ua) ? 'Mac'
+                           : /Windows/.test(ua) ? 'Windows' : 'dispositivo';
+                n = plat + '-' + Math.random().toString(36).slice(2, 6);
+                try { localStorage.setItem('FINANZAS_DEVICE', n); } catch (e) {}
+            }
+            return n;
+        })();
         const IS_DEMO = !API_URL;
 
         // Anonimización del modo demo: el negocio aparece como "Emprendimiento"
@@ -1880,7 +1922,15 @@
          *   transient → red, timeout o respuesta ilegible. Reintentar es seguro
          *               porque el servidor ahora deduplica por uid.
          */
-        const POST_TIMEOUT_MS = 15000;
+        /* INVARIANTE: este timeout tiene que ser MUY superior al LOCK_MS del
+           Apps Script (10s) más lo que tarde la ejecución (~1-2s).
+           Estaba en 15s contra un lock de 25s, o sea al revés, y eso rompía
+           todo apenas había concurrencia: abortar del lado del cliente no
+           cancela la ejecución del servidor, así que cada intento abandonado
+           dejaba una ejecución viva esperando el lock. El reintento se
+           encolaba detrás, y el convoy nunca terminaba de drenar.
+           Si alguna vez baja de 30s, revisar LOCK_MS primero. */
+        const POST_TIMEOUT_MS = 45000;
 
         async function apiPost(payload) {
             const ac = new AbortController();
@@ -1973,6 +2023,7 @@
         function _toWire(tx) {
             return {
                 uid: tx._uid || '',
+                origen: tx._origen || DEVICE_NAME,
                 date: tx.d, type: tx.t, category: tx.c, subcategory: tx.s,
                 amount: tx.a, description: tx.desc, paymentMethod: tx.p || ''
             };
@@ -3602,6 +3653,7 @@
 
         /* --- CONFIG VIEW --- */
         function renderConfig() {
+            renderSyncPanel();
             // API URL
             const url = localStorage.getItem('FINANZAS_API_URL') || '';
             document.getElementById('cfgApiUrlDisplay').innerText = url
@@ -4346,6 +4398,116 @@
             const s = String(v == null ? '' : v);
             if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
             return s;
+        }
+
+        /* --- Panel de sincronización: la cola deja de ser una caja negra --- */
+
+        function _leerFallidas() {
+            try { return JSON.parse(localStorage.getItem('FINANZAS_FAILED') || '[]'); }
+            catch (e) { return []; }
+        }
+
+        // Todo lo que este dispositivo tiene sin confirmar: la cola de envío y
+        // las que agotaron reintentos. Es lo que hay que poder rescatar cuando
+        // un teléfono queda desconectado.
+        function pendientesLocales() {
+            const cola = _loadQueue().flatMap(i => (i.txs || []).map(
+                t => ({ ...t, _estado: 'en cola', _intentos: i.attempts || 0 })));
+            const fallidas = _leerFallidas().flatMap(i => (i.txs || []).map(
+                t => ({ ...t, _estado: 'falló', _error: i.error || '' })));
+            return cola.concat(fallidas);
+        }
+
+        function renderSyncPanel() {
+            const nom = document.getElementById('cfgDeviceName');
+            if (nom) nom.innerText = DEVICE_NAME;
+            const est = document.getElementById('cfgSyncEstado');
+            const det = document.getElementById('cfgSyncDetalle');
+            if (!est || !det) return;
+
+            const p = pendientesLocales();
+            const enCola = p.filter(t => t._estado === 'en cola').length;
+            const fallidas = p.length - enCola;
+
+            if (!API_URL) {
+                est.innerHTML = '⚠️ <b>Sin servidor configurado.</b> Lo que cargues queda solo en este dispositivo.';
+                est.style.color = 'var(--secondary)';
+            } else if (!p.length) {
+                est.innerHTML = '✅ Todo sincronizado.';
+                est.style.color = 'var(--success)';
+            } else {
+                est.innerHTML = `⏳ <b>${p.length} movimiento${p.length > 1 ? 's' : ''} sin subir</b>`
+                    + (fallidas ? ` — ${enCola} en cola, ${fallidas} con error` : '');
+                est.style.color = 'var(--warning)';
+            }
+
+            det.innerHTML = p.length
+                ? p.slice(0, 40).map(t => {
+                    const marca = t._estado === 'falló' ? '❌' : '⏳';
+                    return `<div style="padding:3px 0; border-bottom:1px solid rgba(0,0,0,.06);">`
+                         + `${marca} ${esc(t.d || '')} · ${esc(t.c || '')}/${esc(t.s || '')} · `
+                         + `$${esc(String(t.a ?? ''))} · ${esc((t.desc || '').slice(0, 30))}</div>`;
+                  }).join('') + (p.length > 40 ? `<div style="padding-top:6px;">…y ${p.length - 40} más</div>` : '')
+                : '';
+        }
+
+        async function renameDevice() {
+            const v = await uiPrompt('Queda registrado en cada movimiento que cargues desde este dispositivo.', {
+                title: 'Nombre del dispositivo',
+                label: 'Ej: iPhone de Lau',
+                defaultValue: DEVICE_NAME
+            });
+            if (v === null) return;
+            const n = String(v).trim().slice(0, 40);
+            if (!n) return;
+            localStorage.setItem('FINANZAS_DEVICE', n);
+            _toast('Guardado. Se aplica a los movimientos nuevos.');
+            setTimeout(() => location.reload(), 900);   // DEVICE_NAME es const
+        }
+
+        async function reintentarPendientes() {
+            if (!API_URL) { _toast('Falta configurar el servidor en ⚙️', true); return; }
+            // Las que habían agotado reintentos vuelven a la cola: el uid las
+            // protege de duplicarse, así que reintentar siempre es seguro.
+            const fallidas = _leerFallidas();
+            if (fallidas.length) {
+                const q = _loadQueue();
+                fallidas.forEach(i => q.push({ ...i, attempts: 0 }));
+                _saveQueue(q);
+                localStorage.removeItem('FINANZAS_FAILED');
+            }
+            _toast('Reintentando…');
+            await processPendingQueue();
+            renderSyncPanel();
+            updatePendingIndicator();
+        }
+
+        // El rescate. Baja a CSV todo lo que este dispositivo tiene sin subir,
+        // para poder recuperarlo aunque la sincronización siga rota.
+        function exportarPendientes() {
+            const p = pendientesLocales();
+            if (!p.length) { _toast('No hay movimientos pendientes'); return; }
+            const filas = [['fecha', 'tipo', 'categoria', 'subcategoria', 'monto',
+                            'descripcion', 'forma_pago', 'uid', 'origen', 'estado', 'error']
+                           .join(',')];
+            p.forEach(t => filas.push([
+                csvEscape(t.d), csvEscape(t.t), csvEscape(t.c), csvEscape(t.s),
+                csvEscape(t.a), csvEscape(t.desc || ''), csvEscape(t.p || ''),
+                csvEscape(t._uid || ''), csvEscape(t._origen || DEVICE_NAME),
+                csvEscape(t._estado || ''), csvEscape(t._error || ''),
+            ].join(',')));
+            descargarCSV('﻿' + filas.join('\r\n'),
+                         `pendientes_${DEVICE_NAME}_${new Date().toISOString().slice(0, 10)}.csv`);
+            _toast(`Descargados ${p.length} pendientes`);
+        }
+
+        function descargarCSV(texto, filename) {
+            const blob = new Blob([texto], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function exportCSV(scope) {

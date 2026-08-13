@@ -44,7 +44,30 @@ const MAX_CONFIG_LEN = 40000;
 // las filas viejas (y las que escribe cierre.py) tienen uid vacío y se tratan
 // como "sin idempotencia, escribir siempre".
 const UID_COL = 8;
-const LOCK_MS = 25000;
+
+// Columna I = origen. Qué dispositivo escribió la fila. Aditiva como la H.
+// No es cosmética: sin ella, cuando un teléfono deja de sincronizar no hay
+// forma de saber desde el sheet cuál era ni desde cuándo. Pasó: el celular de
+// Lau estuvo días sin cargar nada y nos enteramos de casualidad.
+const ORIGEN_COL = 9;
+const N_COLS = 9;
+
+/* ─────────────────────────────────────────────────────────────────────────
+   INVARIANTE DE TIEMPOS — no romperla.
+
+       LOCK_MS  +  ejecución  <<  POST_TIMEOUT_MS del cliente
+
+   Estaba al revés (lock 25s vs cliente 15s) y eso solo se rompía con
+   concurrencia real, así que pasó los tests y explotó recién en el uso
+   familiar: el cliente abortaba a los 15s, pero abortar NO cancela la
+   ejecución de Apps Script. Esa ejecución seguía viva esperando el lock,
+   lo tomaba y escribía; el cliente la daba por fallida y reintentaba,
+   creando otra ejecución que se encolaba detrás de la anterior. Un convoy
+   que se alimenta solo y nunca converge.
+
+   10s alcanza de sobra: las operaciones reales tardan ~1-2s.
+   ───────────────────────────────────────────────────────────────────────── */
+const LOCK_MS = 10000;
 
 /**
  * Instalación y estructura
@@ -59,7 +82,7 @@ const LOCK_MS = 25000;
  *   6) La URL (ya guardada en la app via ⚙️) NO cambia al redesplegar.
  *
  * Estructura del sheet (columnas A a H):
- *   A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago | H uid
+ *   A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago | H uid | I origen
  *
  * OJO: el sheet NO tiene fila de header. La fila 1 es un movimiento real (con
  * el texto "Forma de Pago" pegado en G1 por un bug viejo de ensurePaymentColumn_,
@@ -117,13 +140,13 @@ function esTransitorio_(err) {
 }
 
 /**
- * Asegura que la grilla tenga las 8 columnas que necesita appendRow.
+ * Asegura que la grilla tenga las 9 columnas que necesita appendRow.
  *
  * Las FILAS no hacen falta: appendRow expande la grilla solo. Las columnas sí,
- * porque si la pestaña quedara recortada a 7, appendRow con 8 valores falla.
+ * porque si la pestaña quedara recortada, appendRow con 9 valores falla.
  */
 function ensureColumns_(sheet) {
-  const faltan = UID_COL - sheet.getMaxColumns();
+  const faltan = N_COLS - sheet.getMaxColumns();
   if (faltan > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), faltan);
 }
 
@@ -230,7 +253,8 @@ function getRawData() {
       a: Number(row[4] || 0),
       desc: String(row[5] || ''),
       p: String(row[6] || ''),
-      u: String(row[7] || '')   // uid: '' en filas legacy y en las de cierre.py
+      u: String(row[7] || ''),  // uid: '' en filas legacy y en las de cierre.py
+      o: String(row[8] || '')   // origen: qué dispositivo la escribió
     });
   }
   return result;
@@ -257,7 +281,8 @@ function rowFromBody_(body) {
     amount,
     String(body.description || '').slice(0, topeDesc),
     String(body.paymentMethod || body.p || '').slice(0, 50),
-    String(body.uid || '').slice(0, 64)   // '' si el cliente es viejo → sin dedupe
+    String(body.uid || '').slice(0, 64),  // '' si el cliente es viejo → sin dedupe
+    String(body.origen || '').slice(0, 40) // qué dispositivo la escribió
   ];
 }
 

@@ -45,7 +45,7 @@ function montarEntorno(filasIniciales, opts = {}) {
     getMaxColumns: () => hoja.maxCols,
     insertColumnsAfter: (_, n) => { hoja.maxCols += n; },
     getRange: rango,
-    getDataRange: () => rango(1, 1, Math.max(hoja.filas.length, 1), 8),
+    getDataRange: () => rango(1, 1, Math.max(hoja.filas.length, 1), 9),
     appendRow(v) {
       // appendRow expande la grilla sola, igual que el de verdad
       if (hoja.filas.length + 1 > hoja.maxRows) hoja.maxRows = hoja.filas.length + 1;
@@ -184,6 +184,37 @@ const CASOS = [
                                   s: 'Familia', a: 8000, desc: 'Niñera' } });
     return r.deleted === 1 && h.filas.length === 2
         && h.filas.map(f => f[7]).join(',') === 'u1,u3';
+  }],
+
+  ['el origen se escribe en la columna I', () => {
+    const h = montarEntorno([]);
+    post(Object.assign(tx('u1', 'Niñera'), { origen: 'iPhone de Lau' }));
+    return h.filas[0][8] === 'iPhone de Lau';
+  }],
+
+  ['un cliente viejo sin origen no rompe nada', () => {
+    const h = montarEntorno([]);
+    const b = tx('u1', 'Niñera'); delete b.origen;
+    const r = post(b);
+    return r.ok && h.filas[0][8] === '' && h.filas[0][7] === 'u1';
+  }],
+
+  ['getRawData devuelve el origen en el campo o', () => {
+    montarEntorno([]);
+    post(Object.assign(tx('u1', 'a'), { origen: 'Mac' }));
+    post(Object.assign(tx('u2', 'b'), { origen: 'iPhone de Lau' }));
+    return getRawData()[0].o === 'iPhone de Lau';
+  }],
+
+  ['INVARIANTE: el lock del servidor expira MUY antes del timeout del cliente', () => {
+    // El bug que dejó 19 movimientos colgados: lock 25s vs cliente 15s. El
+    // cliente abortaba antes, pero abortar no cancela la ejecución de Apps
+    // Script, así que cada reintento encolaba otra ejecución detrás.
+    const gs = fs.readFileSync('server/apps_script.gs', 'utf8');
+    const cli = fs.readFileSync('index.html', 'utf8');
+    const lock = +(/const LOCK_MS = (\d+)/.exec(gs) || [])[1];
+    const post_ = +(/const POST_TIMEOUT_MS = (\d+)/.exec(cli) || [])[1];
+    return lock > 0 && post_ > 0 && post_ >= lock * 3;
   }],
 
   ['una fila borrada libera su uid para un alta nueva', () => {
