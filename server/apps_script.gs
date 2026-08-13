@@ -136,6 +136,12 @@ const PREFIJO_TRANSITORIO = 'TRANSITORIO: ';
 function esTransitorio_(err) {
   const m = String(err && err.message ? err.message : err);
   return m.indexOf(PREFIJO_TRANSITORIO) !== -1
+    // 'Unauthorized' es TRANSITORIO, no un rechazo del dato. Un token que no
+    // coincide es un problema de configuración que el usuario arregla en 10
+    // segundos desde ⚙️ — y después el movimiento entra perfecto. Tratarlo
+    // como fatal mandaba a la basura movimientos válidos: así se perdieron 18
+    // cargas del celular de Lau ($856.237, 11 días).
+    || /unauthorized|no configurado/i.test(m)
     || /timed? ?out|timeout|too many|rate|internal error|try again|service unavailable|temporarily/i.test(m);
 }
 
@@ -328,7 +334,16 @@ function addTransactionsAtomic_(bodies) {
       ensureColumns_(sheet);
       rows.forEach(function (r) { sheet.appendRow(r); });
     }
-    return { ok: true, written: rows.length, skipped: skipped };
+    // Se devuelven los UIDs, no un conteo. El cliente necesita saber si SU
+    // movimiento quedó, no cuántos quedaron: con un número no puede
+    // distinguir "se guardó el mío" de "se guardó otro", y terminaba borrando
+    // de su cola cosas que el servidor nunca escribió.
+    return {
+      ok: true,
+      written: rows.length,
+      writtenUids: rows.map(function (r) { return r[UID_COL - 1]; }).filter(String),
+      skipped: skipped
+    };
   });
 }
 

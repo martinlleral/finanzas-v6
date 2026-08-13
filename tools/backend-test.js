@@ -186,6 +186,27 @@ const CASOS = [
         && h.filas.map(f => f[7]).join(',') === 'u1,u3';
   }],
 
+  ['la respuesta trae writtenUids (el cliente confirma por uid, no por ok)', () => {
+    montarEntorno([]);
+    const r = post(tx('u1', 'Niñera'));
+    return Array.isArray(r.writtenUids) && r.writtenUids[0] === 'u1';
+  }],
+
+  ['un uid salteado figura en skipped, no en writtenUids', () => {
+    montarEntorno([]);
+    post(tx('u1', 'Niñera'));
+    const r = post(tx('u1', 'Niñera'));
+    return r.writtenUids.length === 0 && r.skipped[0] === 'u1';
+  }],
+
+  ['Unauthorized es TRANSITORIO: no se descarta el movimiento', () => {
+    // Tratarlo como fatal mandó 18 cargas reales al tacho ($856.237).
+    // Un token que no coincide se arregla en 10 segundos desde la app.
+    const h = montarEntorno([]);
+    const r = post(Object.assign(tx('u1', 'Niñera'), { token: 'token-viejo' }));
+    return r.error === 'Unauthorized' && r.retriable === true && h.filas.length === 0;
+  }],
+
   ['el origen se escribe en la columna I', () => {
     const h = montarEntorno([]);
     post(Object.assign(tx('u1', 'Niñera'), { origen: 'iPhone de Lau' }));
