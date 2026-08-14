@@ -23,12 +23,18 @@ Aplicación web de finanzas personales para registrar ingresos y egresos, con si
 - Backend: manual. Desplegar **el servidor primero**; ambas direcciones son compatibles (servidor v3 + cliente v2 funciona; cliente v3 + servidor v2 funciona degradado sin dedupe).
 
 ## Configuración
-- `API_URL`: vacía por defecto (modo demo/offline, anonimizado para el portafolio público)
+- `API_URL`: vacía por defecto, así la app arranca en modo local/offline y no
+  necesita backend para probarla
 - `SCHEMA`: configurable con categorías y subcategorías
-- ⚠️ **`SCHEMA_DEMO` es la versión anonimizada del portafolio público. Nunca copiar categorías reales ahí.**
+- ⚠️ **`SCHEMA_DEMO` va con categorías genéricas de ejemplo.** Es el esquema que
+  ve cualquiera que abra la demo: no poner ahí las categorías de una instancia
+  real, aunque parezcan inocuas (un árbol de categorías dice bastante sobre la
+  economía de quien lo usa).
 
 ## Contrato con el sheet
-Esquema **posicional, SIN fila de header**. La fila 1 es un movimiento real que tiene el texto "Forma de Pago" pegado en la col G (un header que se escribió sobre datos); `getRawData()` la saltea, así que **ese movimiento es invisible para la app**. No escribir nada en la fila 1.
+Esquema **posicional, SIN fila de header**. La fila 1 puede contener un
+movimiento con texto de header pegado en la col G; `getRawData()` la saltea, así
+que esa fila es invisible para la app. No escribir nada en la fila 1.
 
 ```
 A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago | H uid
