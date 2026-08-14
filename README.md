@@ -2,6 +2,14 @@
 
 Aplicación web de finanzas personales con interfaz neumórfica y teclado numérico integrado, diseñada para registrar ingresos y egresos con sincronización a Google Sheets.
 
+<p align="center">
+  <img src="shot-375-home.png" alt="Pantalla principal: saldo del mes, teclado numérico y accesos a las vistas" width="330">
+</p>
+
+> **La demo abre con datos ficticios y categorías genéricas.** Sin backend
+> configurado la app funciona entera en modo local, así que se puede probar sin
+> conectar nada.
+
 ## Stack
 
 - **HTML5 / CSS3** — Interfaz single-page con diseño neumórfico responsive
