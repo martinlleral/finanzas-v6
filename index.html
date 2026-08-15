@@ -1169,7 +1169,7 @@
            de iOS cachean fuerte, así que un dispositivo puede quedar semanas en
            una versión vieja mientras otro ya tiene la nueva, y el síntoma es el
            mismo. Bumpearla en cada deploy que toque el motor de sync. */
-        const APP_VERSION = 'v7.2';
+        const APP_VERSION = 'v7.3';
 
         const DEVICE_NAME = (() => {
             let n = localStorage.getItem('FINANZAS_DEVICE');
@@ -2744,6 +2744,18 @@
                 defaultValue: currentTok
             });
             if (tok === null) return; // canceló
+            // El campo del token viene JUSTO después del de la URL, así que el
+            // portapapeles suele tener la URL: pegarla acá por error es fácil y
+            // el resultado es que el teléfono deja de sincronizar en silencio.
+            // Pasó de verdad: un celular estuvo 12 días sin subir nada porque
+            // su "token" eran los 114 caracteres de la URL del servidor.
+            if (/^https?:\/\//i.test(tok.trim()) || tok.trim() === input.trim()) {
+                await uiAlert('Eso es la dirección del servidor, no el token. '
+                    + 'El token es la clave secreta que está en las Propiedades del '
+                    + 'Apps Script. Si no la tenés a mano, usá "📱 Configurar otro '
+                    + 'dispositivo" desde un teléfono que ya funcione.', 'Ese no es el token');
+                return;
+            }
             localStorage.setItem('FINANZAS_API_URL', input.trim());
             if (tok.trim()) localStorage.setItem('FINANZAS_API_TOKEN', tok.trim());
             else localStorage.removeItem('FINANZAS_API_TOKEN');
@@ -4479,8 +4491,18 @@
             const enCola = p.filter(t => t._estado === 'en cola').length;
             const fallidas = p.length - enCola;
 
+            // Un token que no coincide bloquea TODO y el usuario solo ve
+            // "no se pudo subir", que suena a problema de señal y a esperar.
+            // Nombrar la causa es la diferencia entre 10 segundos y 12 días.
+            const tokenMal = p.some(t => /unauthorized/i.test(t._error || ''))
+                || /^https?:\/\//i.test(API_TOKEN);
             if (!API_URL) {
                 est.innerHTML = '⚠️ <b>Sin servidor configurado.</b> Lo que cargues queda solo en este dispositivo.';
+                est.style.color = 'var(--secondary)';
+            } else if (tokenMal) {
+                est.innerHTML = '🔑 <b>El token de acceso no coincide.</b> Por eso no sube nada. '
+                    + 'Se arregla en ⚙️ → Cambiar URL, o escaneando el QR desde un teléfono que funcione. '
+                    + 'Lo cargado está a salvo: se sube solo cuando el token esté bien.';
                 est.style.color = 'var(--secondary)';
             } else if (!p.length) {
                 est.innerHTML = '✅ Todo sincronizado.';
