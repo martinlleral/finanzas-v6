@@ -973,6 +973,7 @@
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="reintentarPendientes()">🔄 Reintentar ahora</button>
                 <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="exportarPendientes()">💾 Bajar pendientes (CSV)</button>
+                <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="probarConexion()">🩺 Probar conexión</button>
             </div>
         </div>
 
@@ -1163,6 +1164,13 @@
            hay forma de saber desde el sheet cuál era ni desde cuándo dejó de
            cargar. Pasó exactamente eso y nos enteramos de casualidad, días
            después. Se puede cambiar desde ⚙️. */
+        /* Versión del cliente. Existe porque sin esto no hay forma de saber qué
+           código está corriendo un teléfono: los iconos de "agregar a inicio"
+           de iOS cachean fuerte, así que un dispositivo puede quedar semanas en
+           una versión vieja mientras otro ya tiene la nueva, y el síntoma es el
+           mismo. Bumpearla en cada deploy que toque el motor de sync. */
+        const APP_VERSION = 'v7.2';
+
         const DEVICE_NAME = (() => {
             let n = localStorage.getItem('FINANZAS_DEVICE');
             if (!n) {
@@ -4462,7 +4470,7 @@
 
         function renderSyncPanel() {
             const nom = document.getElementById('cfgDeviceName');
-            if (nom) nom.innerText = DEVICE_NAME;
+            if (nom) nom.innerText = DEVICE_NAME + '  ·  ' + APP_VERSION;
             const est = document.getElementById('cfgSyncEstado');
             const det = document.getElementById('cfgSyncDetalle');
             if (!est || !det) return;
@@ -4507,6 +4515,101 @@
             setTimeout(() => location.reload(), 900);   // DEVICE_NAME es const
         }
 
+        /* Diagnóstico de conexión, para dejar de adivinar desde afuera.
+         *
+         * Un teléfono que no sincroniza es una caja negra: el usuario ve
+         * "no lo logró" y quien tiene que arreglarlo no sabe si el problema es
+         * el token, la versión del cliente, la del backend o la red. Esto hace
+         * las cuatro preguntas por separado, en orden, y deja el resultado
+         * copiado al portapapeles para poder pegarlo en un chat.
+         */
+        async function probarConexion() {
+            const L = [];
+            const P = (s) => { L.push(s); };
+            P('DIAGNÓSTICO ' + new Date().toISOString());
+            P('dispositivo: ' + DEVICE_NAME + ' · cliente ' + APP_VERSION);
+            P('navegador: ' + navigator.userAgent.slice(0, 90));
+            P('online: ' + navigator.onLine);
+            P('servidor configurado: ' + (API_URL ? 'sí' : 'NO'));
+            P('token configurado: ' + (API_TOKEN ? 'sí (' + API_TOKEN.length + ' chars)' : 'NO'));
+
+            const p = pendientesLocales();
+            P('pendientes: ' + p.length + ' (' + p.filter(t => t._estado === 'en cola').length
+              + ' en cola, ' + p.filter(t => t._estado === 'falló').length + ' con error)');
+            const errs = [...new Set(p.map(t => t._error).filter(Boolean))];
+            errs.forEach(e => P('  error: ' + e));
+
+            if (!API_URL) { _copiarDiagnostico(L); return; }
+
+            // 1. LECTURA — ¿llega al servidor y el token sirve?
+            const t0 = Date.now();
+            try {
+                const qs = API_TOKEN ? '&token=' + encodeURIComponent(API_TOKEN) : '';
+                const res = await fetch(API_URL + '?action=getRawData' + qs);
+                const txt = await res.text();
+                let d = null; try { d = JSON.parse(txt); } catch (e) {}
+                if (Array.isArray(d)) {
+                    P('LECTURA: ✅ ok · ' + d.length + ' filas · ' + (Date.now() - t0) + 'ms');
+                    P('backend: ' + ('u' in (d[d.length - 1] || {}) ? 'escribe uid' : '⚠️ SIN uid — backend viejo'));
+                } else if (d && d.error) {
+                    P('LECTURA: ❌ ' + d.error + ' · ' + (Date.now() - t0) + 'ms');
+                } else {
+                    P('LECTURA: ❌ respuesta ilegible (' + res.status + ') · ' + txt.slice(0, 60));
+                }
+            } catch (e) {
+                P('LECTURA: ❌ ' + String(e) + ' · ' + (Date.now() - t0) + 'ms');
+            }
+
+            // 2. ESCRITURA — se escribe una fila de tipo __CONFIG__, no un
+            //    movimiento: recorre exactamente el mismo camino (lock, índice
+            //    de uid, appendRow) pero la app la ignora al leer y el análisis
+            //    financiero no la cuenta. Un diagnóstico no debería ensuciar el
+            //    dato que viene a diagnosticar.
+            const uid = 'diag_' + Date.now().toString(36);
+            const sonda = {
+                action: 'addTransaction', token: API_TOKEN, uid: uid, origen: DEVICE_NAME,
+                date: new Date().toISOString().slice(0, 10), type: CONFIG_MARKER,
+                category: 'diagnostico', subcategory: '', amount: 0,
+                description: 'prueba de conexión · ' + DEVICE_NAME + ' · ' + APP_VERSION,
+                paymentMethod: ''
+            };
+            const t1 = Date.now();
+            const r1 = await apiPost(sonda);
+            P('ESCRITURA: ' + r1.status + ' · ' + (Date.now() - t1) + 'ms'
+              + (r1.error ? ' · ' + r1.error : ''));
+            if (r1.data) {
+                P('  respuesta: written=' + r1.data.written
+                  + ' writtenUids=' + JSON.stringify(r1.data.writtenUids || null)
+                  + ' skipped=' + JSON.stringify(r1.data.skipped || []));
+                P('  ¿confirma el uid?: ' + (_servidorConfirmo({ txs: [{ _uid: uid }] }, r1.data)
+                    ? '✅ sí' : '❌ NO — por esto se traba la cola'));
+                if (!Array.isArray(r1.data.writtenUids)) {
+                    P('  ⚠️ el backend NO devuelve writtenUids: está desactualizado');
+                }
+            }
+
+            // 3. IDEMPOTENCIA — el mismo uid otra vez no debe escribir de nuevo
+            if (r1.status === 'ok') {
+                const r2 = await apiPost(sonda);
+                const sk = (r2.data && r2.data.skipped) || [];
+                P('IDEMPOTENCIA: ' + (sk.indexOf(uid) !== -1
+                    ? '✅ el reenvío se saltea' : '❌ NO saltea — puede duplicar'));
+            }
+
+            _copiarDiagnostico(L);
+        }
+
+        function _copiarDiagnostico(lineas) {
+            const txt = lineas.join('\n');
+            console.log(txt);
+            const listo = () => uiAlert(txt, 'Diagnóstico copiado');
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(txt).then(listo, listo);
+            } else {
+                listo();
+            }
+        }
+
         async function reintentarPendientes() {
             if (!API_URL) { _toast('Falta configurar el servidor en ⚙️', true); return; }
             // Las que habían agotado reintentos vuelven a la cola: el uid las
@@ -4530,13 +4633,15 @@
             const p = pendientesLocales();
             if (!p.length) { _toast('No hay movimientos pendientes'); return; }
             const filas = [['fecha', 'tipo', 'categoria', 'subcategoria', 'monto',
-                            'descripcion', 'forma_pago', 'uid', 'origen', 'estado', 'error']
+                            'descripcion', 'forma_pago', 'uid', 'origen', 'estado', 'error',
+                            'version_cliente']
                            .join(',')];
             p.forEach(t => filas.push([
                 csvEscape(t.d), csvEscape(t.t), csvEscape(t.c), csvEscape(t.s),
                 csvEscape(t.a), csvEscape(t.desc || ''), csvEscape(t.p || ''),
                 csvEscape(t._uid || ''), csvEscape(t._origen || DEVICE_NAME),
                 csvEscape(t._estado || ''), csvEscape(t._error || ''),
+                csvEscape(APP_VERSION),
             ].join(',')));
             descargarCSV('﻿' + filas.join('\r\n'),
                          `pendientes_${DEVICE_NAME}_${new Date().toISOString().slice(0, 10)}.csv`);
