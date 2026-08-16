@@ -1,65 +1,69 @@
-# Handoff — finanzas-v6, estado al 2026-08-15
+# Handoff — finanzas-v6 · estado al 2026-08-16
 
-## 🔴 Lo único abierto: el celular de Lau
-
-**Causa encontrada y confirmada:** su token no es un token, **es la URL del
-servidor**. El diagnóstico dijo `token configurado: sí (114 chars)` y la URL
-del Apps Script mide exactamente 114 caracteres. Se pegó en el campo
-equivocado — el prompt del token viene justo después del de la URL y el
-portapapeles todavía la tenía.
-
-Por eso todo responde `Unauthorized`: lectura y escritura. **12 días sin subir
-nada, 22 movimientos en cola.**
-
-### Cómo se arregla (5 minutos, con el teléfono en la mano)
-
-**Opción A — la buena.** Desde el celular de Martín (que funciona):
-⚙️ → **📱 Configurar otro dispositivo** → escanear el QR con el de Lau.
-Eso escribe la URL y el token correctos de una, sin tipear nada.
-
-**Opción B.** Sacar el token de Apps Script (Configuración del proyecto ⚙️ →
-Propiedades del script → `SECRET_TOKEN`) y cargarlo en el de Lau por
-⚙️ → Cambiar URL → cuando pida el token, pegar **ese** valor.
-
-**Después:** ⚙️ → 🔄 Reintentar ahora. Los 22 deberían subir solos. Los que ya
-se importaron a mano el 13/8 los saltea el servidor por uid — no se duplican.
-
-**Verificar:** 🩺 Probar conexión → `LECTURA: ✅ ok`. Y en el sheet tienen que
-aparecer filas nuevas con `origen = Lau`.
-
-### Si NO suben
-
-Los 22 están en `~/Downloads/pendientes_Lau_2026-08-15.csv`. Importarlos:
-
-```bash
-cd ~/Developer/products/finanzas-v6
-~/.venvs/facturador/bin/python server/importar_pendientes.py \
-    ~/Downloads/pendientes_Lau_2026-08-15.csv            # dry-run
-~/.venvs/facturador/bin/python server/importar_pendientes.py \
-    ~/Downloads/pendientes_Lau_2026-08-15.csv --aplicar
-```
-
-Conserva los uid originales, así que si después el teléfono reintenta, el
-servidor los saltea. ⚠️ Ese CSV tiene los acentos rotos (`AlimentaciÃ³n`):
-el archivo está bien, es Excel/preview mostrándolo mal. El importador lo lee
-con `utf-8-sig` y sale correcto — pero **verificar el dry-run** antes de aplicar.
+> **Para retomar en sesión nueva.** Leer esto primero; el `CLAUDE.md` del repo
+> tiene el detalle técnico y las convenciones que no hay que romper.
 
 ---
 
-### El issue volvía en cada apertura (v7.4, 15/8)
+## 🔴 Lo único abierto: el celular de Lau vuelve a perder el token
 
-`history.replaceState` limpiaba la URL de la sesión, pero **no el acceso
-directo de la pantalla de inicio**: iOS guarda la URL original con sus
-parámetros, así que cada apertura desde el ícono re-ejecutaba el onboarding y
-volvía a pisar el token bueno con el malo.
+### Qué sabemos con certeza
 
-No se arregla limpiando mejor la URL —el acceso directo no es nuestro— sino
-haciendo que el onboarding **no acepte como token algo que tiene forma de
-URL**. El flujo legítimo del QR sigue funcionando.
+1. **La causa raíz está identificada y confirmada:** el token guardado en ese
+   teléfono era **la URL del servidor** (114 caracteres, coincidencia exacta
+   con la URL del Apps Script). Con eso, todo responde `Unauthorized`.
+2. **El teléfono SÍ escribe cuando el token está bien.** Al 16/8 hay 7 filas
+   con `origen = Lau` en el sheet, incluida una carga real
+   (`Trama/Redes $100.000`) y dos pruebas de 🩺 Probar conexión.
+3. **El síntoma es la RECURRENCIA**, no la falla: se arregla, funciona, y en
+   algún momento vuelve a romperse.
 
-Si el ícono de Lau quedó guardado con el link viejo, conviene **borrarlo y
-volver a agregarlo desde la URL limpia** (`https://martinlleral.github.io/finanzas-v6`).
-Con v7.4 ya no hace daño, pero deja el acceso directo prolijo.
+### La hipótesis vigente (parcialmente verificada)
+
+El acceso directo de la pantalla de inicio guarda la URL **con los parámetros
+`?api=…&token=…`**. `history.replaceState` limpia la barra de direcciones de la
+sesión, pero **no toca el acceso directo**: cada apertura desde el ícono vuelve
+a ejecutar el onboarding con lo que traiga ese link.
+
+Verificado que el código hace `replaceState`; **no verificado** que el ícono de
+Lau efectivamente conserve los parámetros. **Ese es el primer chequeo de la
+sesión nueva.**
+
+### Qué se hizo (tres capas, porque una sola no alcanza)
+
+| Capa | Versión | Qué hace |
+|---|---|---|
+| **Prevenir** en el onboarding | v7.4 | El link no puede aplicar un token con forma de URL |
+| **Prevenir** al configurar a mano | v7.3 | `configureApi()` rechaza pegar la URL en el campo del token |
+| **Reparar** al arrancar | **v7.5** | Si el token guardado tiene forma de URL, se descarta y se avisa |
+
+La v7.5 es la que faltaba: prevenir no arregla lo que **ya quedó guardado**.
+Antes, un teléfono decía "token configurado: sí" y fallaba todo — mucho más
+difícil de diagnosticar que uno que dice que le falta.
+
+### Primeros pasos de la sesión nueva
+
+1. En el celular de Lau: cerrar la app del todo, reabrir, y verificar en ⚙️
+   que diga **v7.5**. Si dice otra cosa, el problema es de caché, no de lógica.
+2. **🩺 Probar conexión** → pegar el resultado. Da versión, largo del token,
+   lectura, escritura, confirmación por uid e idempotencia.
+3. Mirar cómo está guardado el acceso directo: si la URL tiene `?api=` o
+   `?token=`, **borrarlo y volver a agregarlo** desde
+   `https://martinlleral.github.io/finanzas-v6` (limpia).
+4. Si vuelve a fallar con v7.5 confirmada y acceso directo limpio, **la
+   hipótesis del link es falsa** y hay que buscar en otro lado. Candidato
+   siguiente: los WebView de iOS pueden tener contextos de almacenamiento
+   distintos (icono vs Safari), o el QR que se escanea trae el token malo
+   embebido — **revisar qué genera `shareConfig()` en el teléfono de Martín**.
+
+### Herramientas ya disponibles para diagnosticar
+
+- **🩺 Probar conexión** (⚙️): 5 preguntas por separado, resultado al
+  portapapeles. Fue lo que resolvió el caso en una línea.
+- **💾 Bajar pendientes (CSV)**: rescata lo que no subió, con `estado`, `error`
+  y `version_cliente`.
+- **`server/importar_pendientes.py`**: mete ese CSV al sheet conservando los
+  uid, así un reintento posterior no duplica.
 
 ---
 
@@ -67,58 +71,56 @@ Con v7.4 ya no hace daño, pero deja el acceso directo prolijo.
 
 | | |
 |---|---|
-| Cliente | **v7.4** en GitHub Pages (se ve en ⚙️) |
-| Backend | v7.1 + writtenUids, desplegado |
-| Sheet | 600 filas · duplicados 0 · salud 62,7/100 |
+| Cliente | **v7.5** en GitHub Pages (la versión se ve en ⚙️) |
+| Backend | v7.1 + `writtenUids`, desplegado |
+| Sheet | 614 filas · duplicados 0 · salud 62,7/100 |
 | Tests | sync 5/5 · auth 11/11 · backend 23/23 · layout 0 de 105 |
 
-**Todo lo demás está cerrado:** duplicados (uid + LockService), sync de
-categorías, layout móvil, token fuera del código, convoy de timeouts,
-confirmación por uid. Detalle en el `CLAUDE.md` del repo.
+**Cerrado:** duplicados (uid + LockService + appendRow), sync de categorías,
+layout móvil, token fuera del código, convoy de timeouts (lock 10s vs cliente
+45s), confirmación por uid, columna origen, pestaña `Auditoría`.
 
 ---
 
-## La lección que costó tres rondas
+## La lección de método
 
-Perdí tres intentos proponiendo causas desde afuera, **y dos de esas
-inferencias fueron erróneas**. Lo que las cerró no fue una hipótesis mejor:
-fue poner un botón de diagnóstico en la app. `token configurado: sí (114
-chars)` resolvió en una línea lo que doce días de síntomas no dejaban ver.
+Perdí varias rondas proponiendo causas desde afuera, **y dos de esas
+inferencias fueron erróneas**. Lo que cerró el caso no fue una hipótesis mejor:
+fue poner un botón de diagnóstico en la app.
 
 **Cuando un dispositivo remoto falla, lo primero no es adivinar la causa: es
-construir la forma de verla.** El diagnóstico (🩺 Probar conexión) y la versión
-visible del cliente son el instrumento; conviene usarlos antes que cualquier
-teoría.
+construir la forma de verla.** Usar 🩺 antes que cualquier teoría.
 
-Corolario de diseño: la app decía *"no se pudo subir"*, que suena a problema de
-señal y a esperar. Ahora dice *"🔑 El token de acceso no coincide. Por eso no
-sube nada"*. **Nombrar la causa es la diferencia entre 10 segundos y 12 días.**
+Corolario: los tres bugs de esta tanda no eran fallas de lógica sino **de
+superficie**. La app hacía lo correcto y no había forma de ver qué pasaba. Cada
+fix real fue agregar visibilidad, no cambiar el algoritmo.
+
+Y el que se repite: **prevenir ≠ reparar.** Hicieron falta las dos.
 
 ---
 
 ## Backlog (nada urgente)
 
-- La fila 1 del sheet es invisible para la app (un Ingreso real de $49.000 de
-  nov-2025 que `getRawData` saltea).
-- Un duplicado viejo sin resolver: "Seguro $80.000" del 3/8 (filas 558/559).
+- La fila 1 del sheet es invisible para la app (Ingreso real de $49.000, nov-2025).
+- Un duplicado viejo: "Seguro $80.000" del 3/8 (filas 558/559).
 - La config no hace merge entre dispositivos: el último que guarda pisa al otro.
-- "Forma de pago" está muerta (93% vacía): darle un default o sacarla.
-- El orden del menú no sigue el uso real (~44 toques/mes de ahorro).
-- Las filas `__CONFIG__/diagnostico` que deja 🩺 Probar conexión se pueden
-  limpiar cada tanto; son invisibles para la app y para el análisis.
+- "Forma de pago" está muerta (93% vacía): default o sacarla.
+- El orden del menú no sigue el uso real (~44 toques/mes).
+- Limpiar cada tanto las filas `__CONFIG__/diagnostico` que deja 🩺 (son
+  invisibles para la app y para el análisis financiero, pero se acumulan).
 
 ---
 
 ## Auditoría financiera
 
-Ya se hizo: `~/.claude/skills/auditarfinanzas/salidas/AUDITORIA-FINANCIERA-2026-08.md`.
-El brief de entrada está al lado y tiene marcadas las dos cosas que resultaron
-mal. La pestaña `Auditoría` del spreadsheet tiene las 5 advertencias para leer
-los datos, y se refresca con:
+Hecha: `~/.claude/skills/auditarfinanzas/salidas/AUDITORIA-FINANCIERA-2026-08.md`.
+El brief de entrada está al lado, con marcadas las dos cosas que resultaron mal.
+
+**Pendiente:** cuando el teléfono de Lau esté estable, correr
 
 ```bash
 ~/.venvs/facturador/bin/python server/publicar_auditoria.py --aplicar
 ```
 
-**Correrla de nuevo cuando suban los 22 de Lau**: son $856.237 de gastos del
-hogar que hoy faltan en el análisis y van a mover las conclusiones.
+Los movimientos que subieron después del análisis (y los ~$856.237 de gastos
+del hogar que estaban en su cola) **van a mover las conclusiones**.
