@@ -973,6 +973,7 @@
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="reintentarPendientes()">🔄 Reintentar ahora</button>
                 <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="exportarPendientes()">💾 Bajar pendientes (CSV)</button>
+                <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="copiarPendientes()">📋 Copiar pendientes</button>
                 <button class="neu-flat" style="padding:8px 15px; border-radius:10px; cursor:pointer; font-size:0.9rem;" onclick="probarConexion()">🩺 Probar conexión</button>
             </div>
         </div>
@@ -1126,6 +1127,26 @@
         // Onboarding multi-dispositivo: si la URL tiene ?api=... (o ?api= y ?token=),
         // los guardamos en localStorage y limpiamos los params.
         // Validación anti-phishing: solo acepta dominios script.google.com.
+
+        /* Con qué link arrancó ESTA apertura.
+         *
+         * Se captura antes de que handleApiFromUrl haga replaceState, porque
+         * después no queda rastro: la barra de direcciones queda limpia pero el
+         * acceso directo de la pantalla de inicio conserva sus parámetros
+         * originales y los vuelve a aplicar en cada apertura. Sin esto no hay
+         * forma de saber, desde un diagnóstico, si el ícono sigue arrastrando
+         * un token viejo o si la app se abrió desde un link limpio. */
+        const BOOT_LINK = (() => {
+            const p = new URLSearchParams(window.location.search);
+            const tk = (p.get('token') || '').trim();
+            return {
+                api: !!(p.get('api') || '').trim(),
+                token: !tk ? 'no'
+                     : /^https?:\/\//i.test(tk) ? '⚠️ una URL (se ignora)'
+                     : tk.length + ' chars'
+            };
+        })();
+
         (function handleApiFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const apiParam = params.get('api');
@@ -1210,7 +1231,39 @@
            de iOS cachean fuerte, así que un dispositivo puede quedar semanas en
            una versión vieja mientras otro ya tiene la nueva, y el síntoma es el
            mismo. Bumpearla en cada deploy que toque el motor de sync. */
-        const APP_VERSION = 'v7.5';
+        const APP_VERSION = 'v7.6';
+
+        /* Identidad del ALMACENAMIENTO, no del teléfono.
+         *
+         * En iOS, la app abierta desde el ícono de la pantalla de inicio y la
+         * misma app abierta en Safari pueden tener localStorage separados: dos
+         * contenedores, con dos configuraciones y dos colas, en un solo
+         * teléfono. Se arregla uno, y el otro sigue roto.
+         *
+         * Sin esto, dos diagnósticos del mismo aparato son indistinguibles de
+         * dos aperturas del mismo contexto — y una cola que pasa de 0 a 23
+         * pendientes en diez minutos no tiene ninguna explicación posible.
+         * Pasó el 16/8/2026 y fue lo que puso el problema en foco.
+         *
+         * Se genera una vez por contenedor y no se toca nunca más: dos
+         * diagnósticos con distinto id son la prueba de que son dos. */
+        const STORAGE_ID = (() => {
+            let id = localStorage.getItem('FINANZAS_STORAGE_ID');
+            if (!id) {
+                id = Math.random().toString(36).slice(2, 8);
+                try {
+                    localStorage.setItem('FINANZAS_STORAGE_ID', id);
+                    localStorage.setItem('FINANZAS_STORAGE_DESDE', new Date().toISOString());
+                } catch (e) {}
+            }
+            return id;
+        })();
+
+        /* Desde dónde se está ejecutando. `navigator.standalone` es de Safari
+           iOS; `display-mode: standalone` es el estándar. Cualquiera de las dos
+           alcanza para distinguir el ícono del navegador. */
+        const ES_ICONO = window.navigator.standalone === true
+            || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
 
         const DEVICE_NAME = (() => {
             let n = localStorage.getItem('FINANZAS_DEVICE');
@@ -4593,12 +4646,30 @@
             P('dispositivo: ' + DEVICE_NAME + ' · cliente ' + APP_VERSION);
             P('navegador: ' + navigator.userAgent.slice(0, 90));
             P('online: ' + navigator.onLine);
+            // Un teléfono puede tener DOS de estos, y sin nombrarlos los dos
+            // diagnósticos se leen como si fueran del mismo lugar.
+            P('contexto: ' + (ES_ICONO ? 'ÍCONO (pantalla de inicio)' : 'navegador (Safari)'));
+            P('almacenamiento: #' + STORAGE_ID + ' · desde '
+              + (localStorage.getItem('FINANZAS_STORAGE_DESDE') || '?').slice(0, 10));
+            P('link de arranque: api=' + (BOOT_LINK.api ? 'sí' : 'no') + ' · token=' + BOOT_LINK.token);
             P('servidor configurado: ' + (API_URL ? 'sí' : 'NO'));
             P('token configurado: ' + (API_TOKEN ? 'sí (' + API_TOKEN.length + ' chars)' : 'NO'));
+            const rep = localStorage.getItem('FINANZAS_TOKEN_REPARADO');
+            if (rep) P('  ⚠️ acá había un token con forma de URL; se descartó el '
+                       + rep.slice(0, 16).replace('T', ' '));
 
             const p = pendientesLocales();
             P('pendientes: ' + p.length + ' (' + p.filter(t => t._estado === 'en cola').length
               + ' en cola, ' + p.filter(t => t._estado === 'falló').length + ' con error)');
+            // La edad de la cola separa dos causas que se ven igual: una cola
+            // vieja es plata atrapada hace semanas; una de hoy es una falla
+            // recién estrenada.
+            const fechas = p.map(t => t.d).filter(Boolean).sort();
+            if (fechas.length) {
+                P('  la más vieja: ' + fechas[0] + ' · la más nueva: ' + fechas[fechas.length - 1]);
+                const monto = p.reduce((s, t) => s + (Number(t.a) || 0), 0);
+                P('  suma atrapada: $' + monto.toLocaleString('es-AR'));
+            }
             const errs = [...new Set(p.map(t => t._error).filter(Boolean))];
             errs.forEach(e => P('  error: ' + e));
 
@@ -4690,11 +4761,15 @@
             updatePendingIndicator();
         }
 
-        // El rescate. Baja a CSV todo lo que este dispositivo tiene sin subir,
-        // para poder recuperarlo aunque la sincronización siga rota.
-        function exportarPendientes() {
-            const p = pendientesLocales();
-            if (!p.length) { _toast('No hay movimientos pendientes'); return; }
+        /* El rescate: saca de este dispositivo todo lo que no pudo subir, para
+         * recuperarlo aunque la sincronización siga rota. Sale por dos vías
+         * porque ninguna funciona en todos lados — archivo abajo, portapapeles
+         * después.
+         *
+         * El CSV, como texto. Las columnas y su orden son el contrato con
+         * server/importar_pendientes.py: preserva el uid, así que reimportar no
+         * duplica aunque más tarde la cola drene sola. */
+        function _csvPendientes(p) {
             const filas = [['fecha', 'tipo', 'categoria', 'subcategoria', 'monto',
                             'descripcion', 'forma_pago', 'uid', 'origen', 'estado', 'error',
                             'version_cliente']
@@ -4706,9 +4781,38 @@
                 csvEscape(t._estado || ''), csvEscape(t._error || ''),
                 csvEscape(APP_VERSION),
             ].join(',')));
-            descargarCSV('﻿' + filas.join('\r\n'),
+            return filas.join('\r\n');
+        }
+
+        function exportarPendientes() {
+            const p = pendientesLocales();
+            if (!p.length) { _toast('No hay movimientos pendientes'); return; }
+            descargarCSV('﻿' + _csvPendientes(p),
                          `pendientes_${DEVICE_NAME}_${new Date().toISOString().slice(0, 10)}.csv`);
             _toast(`Descargados ${p.length} pendientes`);
+        }
+
+        /* El mismo rescate, por portapapeles.
+         *
+         * `descargarCSV` usa <a download> con una blob URL, y eso en una app
+         * de iOS abierta desde la pantalla de inicio no baja ningún archivo:
+         * no hay dónde ponerlo ni barra que lo muestre. El portapapeles sí
+         * funciona ahí — es como llegaron los diagnósticos que resolvieron
+         * este caso — y el texto se pega en cualquier chat.
+         *
+         * No es un atajo: mientras la sincronización esté rota, esto es lo
+         * único que saca la plata cargada de un teléfono que no puede subirla,
+         * y sobrevive incluso a borrar la app. */
+        function copiarPendientes() {
+            const p = pendientesLocales();
+            if (!p.length) { _toast('No hay movimientos pendientes'); return; }
+            const txt = _csvPendientes(p);
+            const listo = () => uiAlert(txt, `${p.length} pendientes copiados`);
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(txt).then(listo, listo);
+            } else {
+                listo();
+            }
         }
 
         function descargarCSV(texto, filename) {
