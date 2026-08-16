@@ -107,7 +107,7 @@ después arreglar. El orden importa y no es reversible.
 
 | | |
 |---|---|
-| Cliente | **v7.6** — escrita y testeada, **sin pushear** (hasta que no llegue a Pages, el teléfono sigue en v7.5) |
+| Cliente | **v7.6** en GitHub Pages, verificado contra la URL real el 16/8 (la versión se ve en ⚙️) |
 | Backend | v7.1 + `writtenUids`, desplegado |
 | Sheet | 614 filas · duplicados 0 · salud 62,7/100 |
 | Tests | sync 5/5 · auth 11/11 · backend 23/23 · layout 0 de 105 |
