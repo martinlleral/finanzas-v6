@@ -1139,7 +1139,27 @@
                 } catch (e) { safe = false; }
                 if (safe) {
                     localStorage.setItem('FINANZAS_API_URL', apiParam.trim());
-                    if (tokenParam) localStorage.setItem('FINANZAS_API_TOKEN', tokenParam.trim());
+                    /* El token del link se aplica SOLO si tiene forma de token.
+                     *
+                     * history.replaceState limpia la URL de la sesión, pero NO
+                     * el acceso directo guardado en la pantalla de inicio: iOS
+                     * conserva la URL original con sus parámetros, así que cada
+                     * vez que se abre la app desde el ícono se vuelve a aplicar
+                     * lo que traiga ese link. Si trae un token equivocado, lo
+                     * reescribe encima del bueno para siempre.
+                     *
+                     * Pasó: un teléfono quedó con la URL del servidor pegada en
+                     * el campo del token. Se arreglaba a mano, y volvía a
+                     * romperse en la siguiente apertura.
+                     *
+                     * Un token nunca es una URL. Rechazarlo acá corta el ciclo:
+                     * el link viejo deja de poder pisar una configuración sana. */
+                    const tk = (tokenParam || '').trim();
+                    if (tk && !/^https?:\/\//i.test(tk) && tk !== apiParam.trim()) {
+                        localStorage.setItem('FINANZAS_API_TOKEN', tk);
+                    } else if (tk) {
+                        console.warn('Token del link ignorado: tiene forma de URL, no de token.');
+                    }
                     localStorage.removeItem('FINANZAS_CACHE');
                 } else {
                     console.warn('API URL rechazada por seguridad:', apiParam);
@@ -1169,7 +1189,7 @@
            de iOS cachean fuerte, así que un dispositivo puede quedar semanas en
            una versión vieja mientras otro ya tiene la nueva, y el síntoma es el
            mismo. Bumpearla en cada deploy que toque el motor de sync. */
-        const APP_VERSION = 'v7.3';
+        const APP_VERSION = 'v7.4';
 
         const DEVICE_NAME = (() => {
             let n = localStorage.getItem('FINANZAS_DEVICE');
