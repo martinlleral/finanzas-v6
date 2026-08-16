@@ -1177,7 +1177,28 @@
         // API_URL: si hay una guardada en localStorage la usa (uso personal);
         // si no, queda vacía (modo demo para portafolio en GitHub Pages)
         const API_URL = localStorage.getItem('FINANZAS_API_URL') || '';
-        const API_TOKEN = localStorage.getItem('FINANZAS_API_TOKEN') || '';
+
+        /* Auto-reparación del token.
+         *
+         * Un token nunca es una URL. Si el guardado tiene esa forma, viene de
+         * haberse pegado en el campo equivocado (o de un link viejo que lo
+         * reescribió) y garantiza `Unauthorized` en todo. Se descarta acá, al
+         * arrancar, en vez de dejarlo "configurado pero roto": un teléfono que
+         * dice tener token y falla todo es mucho más difícil de diagnosticar
+         * que uno que dice que le falta.
+         *
+         * Esto REPARA; la validación del onboarding y de configureApi PREVIENE.
+         * Hacen falta las dos: prevenir no arregla lo que ya quedó guardado. */
+        const API_TOKEN = (() => {
+            const t = (localStorage.getItem('FINANZAS_API_TOKEN') || '').trim();
+            if (t && (/^https?:\/\//i.test(t) || t === API_URL)) {
+                localStorage.removeItem('FINANZAS_API_TOKEN');
+                localStorage.setItem('FINANZAS_TOKEN_REPARADO', new Date().toISOString());
+                console.warn('Token descartado: tenía forma de URL.');
+                return '';
+            }
+            return t;
+        })();
 
         /* Nombre del dispositivo — va a la columna I de cada fila que escribe.
            No es un adorno: cuando un teléfono deja de sincronizar, sin esto no
@@ -1189,7 +1210,7 @@
            de iOS cachean fuerte, así que un dispositivo puede quedar semanas en
            una versión vieja mientras otro ya tiene la nueva, y el síntoma es el
            mismo. Bumpearla en cada deploy que toque el motor de sync. */
-        const APP_VERSION = 'v7.4';
+        const APP_VERSION = 'v7.5';
 
         const DEVICE_NAME = (() => {
             let n = localStorage.getItem('FINANZAS_DEVICE');
@@ -4515,7 +4536,7 @@
             // "no se pudo subir", que suena a problema de señal y a esperar.
             // Nombrar la causa es la diferencia entre 10 segundos y 12 días.
             const tokenMal = p.some(t => /unauthorized/i.test(t._error || ''))
-                || /^https?:\/\//i.test(API_TOKEN);
+                || !API_TOKEN || localStorage.getItem('FINANZAS_TOKEN_REPARADO');
             if (!API_URL) {
                 est.innerHTML = '⚠️ <b>Sin servidor configurado.</b> Lo que cargues queda solo en este dispositivo.';
                 est.style.color = 'var(--secondary)';
