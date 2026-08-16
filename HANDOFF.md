@@ -46,11 +46,28 @@ con `utf-8-sig` y sale correcto — pero **verificar el dry-run** antes de aplic
 
 ---
 
+### El issue volvía en cada apertura (v7.4, 15/8)
+
+`history.replaceState` limpiaba la URL de la sesión, pero **no el acceso
+directo de la pantalla de inicio**: iOS guarda la URL original con sus
+parámetros, así que cada apertura desde el ícono re-ejecutaba el onboarding y
+volvía a pisar el token bueno con el malo.
+
+No se arregla limpiando mejor la URL —el acceso directo no es nuestro— sino
+haciendo que el onboarding **no acepte como token algo que tiene forma de
+URL**. El flujo legítimo del QR sigue funcionando.
+
+Si el ícono de Lau quedó guardado con el link viejo, conviene **borrarlo y
+volver a agregarlo desde la URL limpia** (`https://martinlleral.github.io/finanzas-v6`).
+Con v7.4 ya no hace daño, pero deja el acceso directo prolijo.
+
+---
+
 ## Estado del sistema
 
 | | |
 |---|---|
-| Cliente | **v7.3** en GitHub Pages (se ve en ⚙️) |
+| Cliente | **v7.4** en GitHub Pages (se ve en ⚙️) |
 | Backend | v7.1 + writtenUids, desplegado |
 | Sheet | 600 filas · duplicados 0 · salud 62,7/100 |
 | Tests | sync 5/5 · auth 11/11 · backend 23/23 · layout 0 de 105 |
