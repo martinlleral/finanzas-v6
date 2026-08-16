@@ -5,29 +5,37 @@
 
 ---
 
-## 🔴 Lo único abierto: el celular de Lau vuelve a perder el token
+## 🔴 Lo único abierto: el teléfono de Lau tiene DOS apps, y una está rota
+
+**Resuelto el 16/8.** El teléfono nunca "perdió" el token: tiene **dos
+`localStorage` separados** — el del ícono de la pantalla de inicio y el de
+Safari — y cada arreglo entraba en el que no era. Probado con v7.6: los ids de
+almacenamiento son distintos (`#pimk3a` vs `#u2bp2y`).
+
+Queda **un solo paso**: poner el token a mano dentro del ícono. Todo lo demás
+(rescate de los $1.002.537 atrapados, confirmación de la causa) está hecho.
 
 ### Qué sabemos con certeza
 
-1. **La causa raíz está identificada y confirmada:** el token guardado en ese
-   teléfono era **la URL del servidor** (114 caracteres, coincidencia exacta
-   con la URL del Apps Script). Con eso, todo responde `Unauthorized`.
-2. **El teléfono SÍ escribe cuando el token está bien.** Al 16/8 hay 7 filas
-   con `origen = Lau` en el sheet, incluida una carga real
-   (`Trama/Redes $100.000`) y dos pruebas de 🩺 Probar conexión.
-3. **El síntoma es la RECURRENCIA**, no la falla: se arregla, funciona, y en
-   algún momento vuelve a romperse.
+1. **El token guardado en el contenedor del ícono era la URL del servidor**
+   (114 caracteres, coincidencia exacta con la del Apps Script). Con eso, todo
+   responde `Unauthorized`. v7.5 ya lo descartó solo (16/8, 14:30).
+2. **El teléfono SÍ escribe cuando el token está bien.** El contenedor de
+   Safari lee 614 filas, escribe, confirma por uid y saltea el reenvío.
+3. **El síntoma era la RECURRENCIA**, y su causa es la de arriba: se arreglaba
+   un contenedor y se seguía usando el otro.
 
-### La hipótesis vigente (parcialmente verificada)
+### ~~La hipótesis del link~~ — DESCARTADA el 16/8
 
-El acceso directo de la pantalla de inicio guarda la URL **con los parámetros
-`?api=…&token=…`**. `history.replaceState` limpia la barra de direcciones de la
-sesión, pero **no toca el acceso directo**: cada apertura desde el ícono vuelve
-a ejecutar el onboarding con lo que traiga ese link.
+> El acceso directo guardaría la URL con los parámetros `?api=…&token=…`, y
+> cada apertura desde el ícono volvería a aplicar lo que trajera ese link.
 
-Verificado que el código hace `replaceState`; **no verificado** que el ícono de
-Lau efectivamente conserve los parámetros. **Ese es el primer chequeo de la
-sesión nueva.**
+Se cayó con evidencia directa: el diagnóstico del ícono reporta **`link de
+arranque: api=no · token=no`**. El acceso directo está limpio y nunca fue el
+problema. Las capas v7.3/v7.4 que salieron de esta hipótesis igual sirven —
+previenen un error real de tipeo — pero no eran la causa de este caso.
+
+Se deja escrita porque costó tres versiones y para no volver a recorrerla.
 
 ### Qué se hizo (tres capas, porque una sola no alcanza)
 
@@ -42,7 +50,43 @@ La v7.5 es la que faltaba: prevenir no arregla lo que **ya quedó guardado**.
 Antes, un teléfono decía "token configurado: sí" y fallaba todo — mucho más
 difícil de diagnosticar que uno que dice que le falta.
 
-### 16/8 · La hipótesis del link quedó descartada. Son DOS almacenamientos
+### 16/8 · CONFIRMADO con v7.6: son dos almacenamientos
+
+Los dos diagnósticos, mismo teléfono, mismo día:
+
+| | ícono (pantalla de inicio) | Safari |
+|---|---|---|
+| **almacenamiento** | **`#pimk3a`** | **`#u2bp2y`** |
+| token | NO (v7.5 descartó uno con forma de URL, 14:30) | sí (36 chars) |
+| pendientes | 23 · del 3/8 al 15/8 · **$1.002.537** | 0 |
+| lectura | ❌ | ✅ 614 filas |
+
+Dos ids distintos: probado. Y `link de arranque: api=no · token=no` cierra la
+hipótesis anterior desde el otro lado — el acceso directo está limpio, el link
+nunca fue el problema.
+
+**Rescate hecho** (16/8, `importar_pendientes.py`): de los 23, **18 ya estaban
+en el sheet** por uid (rescates del 13 y 15/8) y entraron los **5 que faltaban,
+$146.300**. Sheet 616 → 621, backup en
+`backups/movimientos-20260816-145552-pre-import.csv`. Cero duplicados: la
+idempotencia por uid funcionó exactamente como estaba diseñada.
+
+**Falta el paso 3**: poner el token de 36 chars a mano dentro del ícono. El
+token se saca del contenedor sano sin salir del teléfono — en Safari, ⚙️ →
+Configurar API → Aceptar la URL → el segundo prompt trae el token escrito →
+copiarlo → **Cancelar** (no guarda nada) → repetir en el ícono, pegando.
+
+Al guardar, la app recarga y la cola drena sola: el servidor saltea los 23 por
+uid porque ya están todos en el sheet.
+
+**Suelto, para vigilar:** el 🩺 del ícono dio `TypeError: Load failed` a los
+**40ms**, cuando una hora antes ese mismo contenedor daba `Unauthorized` a los
+1239ms (o sea, llegaba al servidor). 40ms es "ni salió a la red" — el patrón de
+una PWA de iOS recién despertada del background. **Si persiste con el token ya
+puesto, no es la red**: hay que mirar la URL de ese contenedor, que el
+diagnóstico hoy solo reporta como "configurado: sí".
+
+### El detalle de cómo se llegó ahí
 
 Dos diagnósticos del mismo teléfono, con diez minutos de diferencia:
 
@@ -75,22 +119,16 @@ Era el paso 3 de este handoff y **destruye los 23 movimientos**: en iOS,
 eliminar la web app de la pantalla de inicio borra sus datos. Primero rescatar,
 después arreglar. El orden importa y no es reversible.
 
-### Primeros pasos de la sesión nueva
+### El procedimiento, para la próxima vez que pase
 
-1. **Rescatar** desde el ícono: ⚙️ → **📋 Copiar pendientes** → pegar el texto
-   en cualquier chat. (El CSV con `<a download>` no baja nada en una PWA de
-   iOS; el portapapeles sí funciona ahí.) Después:
-   `~/.venvs/facturador/bin/python server/importar_pendientes.py <archivo>.csv`
-   — preserva el uid, así que si la cola drena sola más tarde no duplica.
-2. **Confirmar** con v7.6: 🩺 desde el **ícono** y 🩺 desde **Safari**. Si los
-   `almacenamiento: #xxxxxx` son distintos, está probado. La línea
-   `la más vieja:` de los pendientes lo confirma por otro lado: una cola con
-   fechas de semanas atrás no se generó hoy.
-3. **Arreglar el contenedor correcto**: dentro del ícono, ⚙️ → Cambiar URL →
-   pegar el token de 36 chars a mano. Sin borrar nada. El QR no sirve acá: la
-   cámara siempre abre Safari, que es el otro contenedor.
-4. Si los dos `#id` resultan **iguales**, esta hipótesis también es falsa y hay
-   que mirar el `link de arranque:` que ahora reporta el diagnóstico.
+1. ~~**Rescatar** antes de tocar nada~~ ✅ hecho el 16/8. ⚙️ → **📋 Copiar
+   pendientes** (o el CSV, si baja) → `importar_pendientes.py`. Preserva el uid,
+   así que reimportar y que la cola drene después no duplica.
+2. ~~**Confirmar** con los dos 🩺~~ ✅ hecho: `#pimk3a` ≠ `#u2bp2y`.
+3. **Arreglar el contenedor correcto** ← pendiente. Ver arriba.
+
+Si alguna vez los dos `#id` salen **iguales**, esta hipótesis también sería
+falsa y habría que mirar el `link de arranque:` del diagnóstico.
 
 ### Herramientas ya disponibles para diagnosticar
 
@@ -109,7 +147,7 @@ después arreglar. El orden importa y no es reversible.
 |---|---|
 | Cliente | **v7.6** en GitHub Pages, verificado contra la URL real el 16/8 (la versión se ve en ⚙️) |
 | Backend | v7.1 + `writtenUids`, desplegado |
-| Sheet | 614 filas · duplicados 0 · salud 62,7/100 |
+| Sheet | 621 filas · duplicados 0 · salud 62,7/100 |
 | Tests | sync 5/5 · auth 11/11 · backend 23/23 · layout 0 de 105 |
 
 **Cerrado:** duplicados (uid + LockService + appendRow), sync de categorías,
