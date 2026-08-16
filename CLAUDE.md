@@ -11,7 +11,7 @@ Aplicación web de finanzas personales para registrar ingresos y egresos, con si
 - localStorage (persistencia offline)
 
 ## Estructura
-- **Archivo único**: `index.html` (~4200 líneas). **Line endings CRLF** — respetarlos: un script que los pase a LF genera un diff de 8000 líneas irrevisable.
+- **Archivo único**: `index.html` (~4800 líneas). **Line endings LF**, igual que el resto del repo (`core.autocrlf=input`, sin `.gitattributes`). Fue CRLF hasta que se normalizó; la regla que sobrevive es la razón, no el formato: **no correr nada que reescriba los finales de línea de punta a punta** — genera un diff de miles de líneas irrevisable que esconde el cambio real.
 - `server/apps_script.gs` (backend, **LF**) — se despliega a mano copiando y pegando en el editor de Apps Script.
 - `server/dedupe_movimientos.py` — limpieza de duplicados históricos del sheet (dry-run por default).
 - Vistas: home, historial, tendencias, Mar de Pan, hogar, config, mes, breakdown, sub, confirm

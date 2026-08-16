@@ -35,26 +35,62 @@ sesión nueva.**
 |---|---|---|
 | **Prevenir** en el onboarding | v7.4 | El link no puede aplicar un token con forma de URL |
 | **Prevenir** al configurar a mano | v7.3 | `configureApi()` rechaza pegar la URL en el campo del token |
-| **Reparar** al arrancar | **v7.5** | Si el token guardado tiene forma de URL, se descarta y se avisa |
+| **Reparar** al arrancar | v7.5 | Si el token guardado tiene forma de URL, se descarta y se avisa |
+| **Ver cuál de los dos** | **v7.6** | `almacenamiento: #id` + contexto ícono/Safari + edad de la cola + rescate por portapapeles |
 
 La v7.5 es la que faltaba: prevenir no arregla lo que **ya quedó guardado**.
 Antes, un teléfono decía "token configurado: sí" y fallaba todo — mucho más
 difícil de diagnosticar que uno que dice que le falta.
 
+### 16/8 · La hipótesis del link quedó descartada. Son DOS almacenamientos
+
+Dos diagnósticos del mismo teléfono, con diez minutos de diferencia:
+
+| | 15:06 (recién sincronizado por QR) | 15:16 (al reabrir) |
+|---|---|---|
+| token | sí (36 chars) | **NO** |
+| servidor | sí | sí |
+| **pendientes** | **0** | **23** (22 en cola, 1 con error) |
+
+**Una cola de pendientes solo crece cuando alguien carga un movimiento.** Nadie
+cargó 23 en diez minutos, y en el primero estaba vacía. Una cola no puede pasar
+de 0 a 23 sola: **no es la misma cola**.
+
+En iOS, la app abierta desde el **ícono de la pantalla de inicio** y la misma
+app abierta en **Safari** tienen `localStorage` separados. El QR se escanea con
+la cámara → abre **Safari** → ahí quedó el token bueno y una cola limpia. Al
+"abrirla de vuelta" se toca el **ícono** → otro contenedor, con la config vieja
+y todas las cargas acumuladas sin subir.
+
+Encaja el resto: en el ícono el servidor sigue configurado (nunca se perdió) y
+el token dice `NO` porque **v7.5 hizo su trabajo** — encontró ahí el token con
+forma de URL y lo descartó. Sin v7.5 ese teléfono diría "token: sí (114 chars)"
+y fallaría igual, que es el caso difícil de ver.
+
+Explica la recurrencia entera: cada arreglo entraba en el contenedor que no era.
+
+### 🔴 NO borrar el ícono para "volver a agregarlo limpio"
+
+Era el paso 3 de este handoff y **destruye los 23 movimientos**: en iOS,
+eliminar la web app de la pantalla de inicio borra sus datos. Primero rescatar,
+después arreglar. El orden importa y no es reversible.
+
 ### Primeros pasos de la sesión nueva
 
-1. En el celular de Lau: cerrar la app del todo, reabrir, y verificar en ⚙️
-   que diga **v7.5**. Si dice otra cosa, el problema es de caché, no de lógica.
-2. **🩺 Probar conexión** → pegar el resultado. Da versión, largo del token,
-   lectura, escritura, confirmación por uid e idempotencia.
-3. Mirar cómo está guardado el acceso directo: si la URL tiene `?api=` o
-   `?token=`, **borrarlo y volver a agregarlo** desde
-   `https://martinlleral.github.io/finanzas-v6` (limpia).
-4. Si vuelve a fallar con v7.5 confirmada y acceso directo limpio, **la
-   hipótesis del link es falsa** y hay que buscar en otro lado. Candidato
-   siguiente: los WebView de iOS pueden tener contextos de almacenamiento
-   distintos (icono vs Safari), o el QR que se escanea trae el token malo
-   embebido — **revisar qué genera `shareConfig()` en el teléfono de Martín**.
+1. **Rescatar** desde el ícono: ⚙️ → **📋 Copiar pendientes** → pegar el texto
+   en cualquier chat. (El CSV con `<a download>` no baja nada en una PWA de
+   iOS; el portapapeles sí funciona ahí.) Después:
+   `~/.venvs/facturador/bin/python server/importar_pendientes.py <archivo>.csv`
+   — preserva el uid, así que si la cola drena sola más tarde no duplica.
+2. **Confirmar** con v7.6: 🩺 desde el **ícono** y 🩺 desde **Safari**. Si los
+   `almacenamiento: #xxxxxx` son distintos, está probado. La línea
+   `la más vieja:` de los pendientes lo confirma por otro lado: una cola con
+   fechas de semanas atrás no se generó hoy.
+3. **Arreglar el contenedor correcto**: dentro del ícono, ⚙️ → Cambiar URL →
+   pegar el token de 36 chars a mano. Sin borrar nada. El QR no sirve acá: la
+   cámara siempre abre Safari, que es el otro contenedor.
+4. Si los dos `#id` resultan **iguales**, esta hipótesis también es falsa y hay
+   que mirar el `link de arranque:` que ahora reporta el diagnóstico.
 
 ### Herramientas ya disponibles para diagnosticar
 
@@ -71,7 +107,7 @@ difícil de diagnosticar que uno que dice que le falta.
 
 | | |
 |---|---|
-| Cliente | **v7.5** en GitHub Pages (la versión se ve en ⚙️) |
+| Cliente | **v7.6** — escrita y testeada, **sin pushear** (hasta que no llegue a Pages, el teléfono sigue en v7.5) |
 | Backend | v7.1 + `writtenUids`, desplegado |
 | Sheet | 614 filas · duplicados 0 · salud 62,7/100 |
 | Tests | sync 5/5 · auth 11/11 · backend 23/23 · layout 0 de 105 |
@@ -96,6 +132,16 @@ superficie**. La app hacía lo correcto y no había forma de ver qué pasaba. Ca
 fix real fue agregar visibilidad, no cambiar el algoritmo.
 
 Y el que se repite: **prevenir ≠ reparar.** Hicieron falta las dos.
+
+**16/8 — el agregado:** lo que resolvió esta vuelta no fue una línea que dijera
+la causa, sino **una que no cerraba**: pendientes 0 → 23 en diez minutos. Un
+número imposible vale más que cinco correctos, porque solo admite una
+explicación. Por eso el diagnóstico tiene que reportar cosas que puedan
+contradecirse entre sí, no solo estados sanos.
+
+Corolario para este caso: **hay que identificar el contenedor, no el aparato.**
+Cuatro versiones se fueron en arreglar "el teléfono de Lau" cuando el teléfono
+tenía dos, y cada arreglo entraba en el que no era.
 
 ---
 
