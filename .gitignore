@@ -20,3 +20,6 @@ server/.dedupe_decisiones.json
 backups/
 server/.dedupe_config.json
 server/__pycache__/
+
+# Documento de trabajo local — no se versiona en este repo.
+HANDOFF.md
