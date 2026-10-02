@@ -1231,7 +1231,7 @@
            de iOS cachean fuerte, así que un dispositivo puede quedar semanas en
            una versión vieja mientras otro ya tiene la nueva, y el síntoma es el
            mismo. Bumpearla en cada deploy que toque el motor de sync. */
-        const APP_VERSION = 'v7.6';
+        const APP_VERSION = 'v7.7';
 
         /* Identidad del ALMACENAMIENTO, no del teléfono.
          *
@@ -4639,7 +4639,75 @@
          * las cuatro preguntas por separado, en orden, y deja el resultado
          * copiado al portapapeles para poder pegarlo en un chat.
          */
+        /* La forma de una URL sin mostrar su id. El diagnóstico se pega en
+         * chats y la URL del servidor es media llave, pero su FORMA es justo
+         * lo que rompe una lectura: un /u/1/ de varias cuentas de Google, un
+         * /dev en lugar de /exec, una consulta colgada al final. */
+        function _formaDeUrl(u) {
+            try {
+                const x = new URL(u);
+                const ruta = x.pathname.replace(/\/s\/[^/]+/, m => '/s/<id de ' + (m.length - 3) + '>');
+                return x.hostname + ruta
+                     + (x.search ? ' · ⚠️ trae una ?consulta pegada' : '')
+                     + (x.hash ? ' · ⚠️ trae un #ancla pegado' : '')
+                     + (/^\/macros\/s\/[^/]+\/exec$/.test(x.pathname) ? ''
+                        : ' · ⚠️ no tiene la forma /macros/s/<id>/exec');
+            } catch (e) { return '⚠️ no es una URL válida'; }
+        }
+
+        /* Qué volvió cuando lo que volvió no es JSON. "Respuesta ilegible
+         * (404)" a secas no separa tres causas que se arreglan en lugares
+         * distintos: la URL guardada, la publicación del script o Google. */
+        function _describirIlegible(P, res, txt) {
+            let fin = '?';
+            try { const f = new URL(res.url); fin = f.hostname + f.pathname.replace(/\/s\/[^/]+/, '/s/<id>'); }
+            catch (e) {}
+            P('  terminó en: ' + fin + (res.redirected ? ' (hubo redirección)' : ' (sin redirección)'));
+            let tipo = '?';
+            try { tipo = res.headers.get('content-type') || '?'; } catch (e) {}
+            P('  tipo de contenido: ' + tipo);
+            const tit = (txt.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1];
+            const dice = tit || txt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+            P('  la página dice: ' + dice.trim().slice(0, 80));
+        }
+
+        /* Lectura de control: la misma URL, sin token y sin pedir datos. Un
+         * servidor sano contesta JSON aunque sea para rechazarla. Si esto
+         * también vuelve ilegible, lo roto es el camino de lectura entero (la
+         * URL o la publicación); si vuelve JSON, el servidor contesta y lo que
+         * falla es traer los datos. */
+        async function _lecturaDeControl(P) {
+            try {
+                const res = await fetch(API_URL + '?action=ping');
+                const txt = await res.text();
+                let d = null; try { d = JSON.parse(txt); } catch (e) {}
+                if (d && typeof d === 'object') {
+                    P('  control (sin token, sin datos): ✅ el servidor contesta JSON'
+                      + (d.backend ? ' · backend ' + d.backend : '')
+                      + ' → falla al traer los datos, no al llegar');
+                } else {
+                    P('  control (sin token, sin datos): ❌ también ilegible (' + res.status
+                      + ') → no llega al script: revisar la URL y la publicación');
+                }
+            } catch (e) {
+                P('  control (sin token, sin datos): ❌ ' + String(e));
+            }
+        }
+
+        /* Una corrida a la vez. El diagnóstico tarda unos segundos y hasta
+         * ahora no avisaba que estaba corriendo, así que se tocaba de nuevo:
+         * cada toque dejaba otra fila de prueba en la planilla (llegó a haber
+         * cinco en cinco segundos). */
+        let _diagEnCurso = false;
         async function probarConexion() {
+            if (_diagEnCurso) { _toast('El diagnóstico ya está corriendo…'); return; }
+            _diagEnCurso = true;
+            _toast('Probando la conexión… son unos segundos');
+            try { await _probarConexion(); }
+            finally { _diagEnCurso = false; }
+        }
+
+        async function _probarConexion() {
             const L = [];
             const P = (s) => { L.push(s); };
             P('DIAGNÓSTICO ' + new Date().toISOString());
@@ -4653,6 +4721,7 @@
               + (localStorage.getItem('FINANZAS_STORAGE_DESDE') || '?').slice(0, 10));
             P('link de arranque: api=' + (BOOT_LINK.api ? 'sí' : 'no') + ' · token=' + BOOT_LINK.token);
             P('servidor configurado: ' + (API_URL ? 'sí' : 'NO'));
+            if (API_URL) P('  forma de la URL: ' + _formaDeUrl(API_URL));
             P('token configurado: ' + (API_TOKEN ? 'sí (' + API_TOKEN.length + ' chars)' : 'NO'));
             const rep = localStorage.getItem('FINANZAS_TOKEN_REPARADO');
             if (rep) P('  ⚠️ acá había un token con forma de URL; se descartó el '
@@ -4688,7 +4757,9 @@
                 } else if (d && d.error) {
                     P('LECTURA: ❌ ' + d.error + ' · ' + (Date.now() - t0) + 'ms');
                 } else {
-                    P('LECTURA: ❌ respuesta ilegible (' + res.status + ') · ' + txt.slice(0, 60));
+                    P('LECTURA: ❌ respuesta ilegible (' + res.status + ') · ' + (Date.now() - t0) + 'ms');
+                    _describirIlegible(P, res, txt);
+                    await _lecturaDeControl(P);
                 }
             } catch (e) {
                 P('LECTURA: ❌ ' + String(e) + ' · ' + (Date.now() - t0) + 'ms');
@@ -4712,6 +4783,7 @@
             P('ESCRITURA: ' + r1.status + ' · ' + (Date.now() - t1) + 'ms'
               + (r1.error ? ' · ' + r1.error : ''));
             if (r1.data) {
+                if (r1.data.backend) P('  backend: ' + r1.data.backend);
                 P('  respuesta: written=' + r1.data.written
                   + ' writtenUids=' + JSON.stringify(r1.data.writtenUids || null)
                   + ' skipped=' + JSON.stringify(r1.data.skipped || []));
@@ -4723,11 +4795,26 @@
             }
 
             // 3. IDEMPOTENCIA — el mismo uid otra vez no debe escribir de nuevo
+            //    Son TRES resultados, no dos. Si el segundo envío falla, no se
+            //    sabe nada sobre duplicados: informarlo como "puede duplicar"
+            //    acusa al servidor de algo que no hizo, y se termina buscando
+            //    una falla de idempotencia en una planilla que tiene una sola
+            //    fila. Pasó.
             if (r1.status === 'ok') {
                 const r2 = await apiPost(sonda);
-                const sk = (r2.data && r2.data.skipped) || [];
-                P('IDEMPOTENCIA: ' + (sk.indexOf(uid) !== -1
-                    ? '✅ el reenvío se saltea' : '❌ NO saltea — puede duplicar'));
+                const d2 = r2.data || {};
+                const sk = Array.isArray(d2.skipped) ? d2.skipped : [];
+                const wr = Array.isArray(d2.writtenUids) ? d2.writtenUids : [];
+                if (r2.status !== 'ok') {
+                    P('IDEMPOTENCIA: ⚠️ sin comprobar — el segundo envío falló ('
+                      + (r2.error || r2.status) + '). Eso NO es un duplicado: repetir el 🩺.');
+                } else if (sk.indexOf(uid) !== -1) {
+                    P('IDEMPOTENCIA: ✅ el reenvío se saltea');
+                } else if (wr.indexOf(uid) !== -1 || Number(d2.written) > 0) {
+                    P('IDEMPOTENCIA: ❌ el servidor ESCRIBIÓ de nuevo — duplica');
+                } else {
+                    P('IDEMPOTENCIA: ❌ el servidor no dice si salteó — backend desactualizado');
+                }
             }
 
             _copiarDiagnostico(L);
