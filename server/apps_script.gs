@@ -47,8 +47,8 @@ const UID_COL = 8;
 
 // Columna I = origen. Qué dispositivo escribió la fila. Aditiva como la H.
 // No es cosmética: sin ella, cuando un teléfono deja de sincronizar no hay
-// forma de saber desde el sheet cuál era ni desde cuándo. Pasó: el celular de
-// Lau estuvo días sin cargar nada y nos enteramos de casualidad.
+// forma de saber desde el sheet cuál era ni desde cuándo. Pasó: un celular de
+// la familia estuvo días sin cargar nada y nos enteramos de casualidad.
 const ORIGEN_COL = 9;
 const N_COLS = 9;
 
@@ -140,7 +140,7 @@ function esTransitorio_(err) {
     // coincide es un problema de configuración que el usuario arregla en 10
     // segundos desde ⚙️ — y después el movimiento entra perfecto. Tratarlo
     // como fatal mandaba a la basura movimientos válidos: así se perdieron 18
-    // cargas del celular de Lau ($[monto], 11 días).
+    // cargas de un celular de la familia (11 días).
     || /unauthorized|no configurado/i.test(m)
     || /timed? ?out|timeout|too many|rate|internal error|try again|service unavailable|temporarily/i.test(m);
 }

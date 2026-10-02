@@ -782,7 +782,7 @@
         </div>
         <label for="histSearch" class="visually-hidden">Buscar transacciones</label>
         <div id="historyInsights" class="insight-bar empty" role="status" aria-live="polite" aria-atomic="true"></div>
-        <input type="text" id="histSearch" class="neu-input" placeholder="🔍 Buscar: Amadeo, Nafta, Sueldos..."
+        <input type="text" id="histSearch" class="neu-input" placeholder="🔍 Buscar: Colegio, Nafta, Sueldos..."
             style="margin-bottom:15px;" spellcheck="false" autocomplete="off" oninput="runSearch()">
         <div id="searchResults" style="display:none;"></div>
         <div id="historyContent">
@@ -992,7 +992,7 @@
         <button class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addAlias()">+ Agregar alias</button>
 
         <h3 id="cfgTagsHeader" style="color:#555; margin-bottom:10px;">🏷️ Tags personales <span style="font-size:0.7rem; color:#555555; font-weight:normal;">(solo este dispositivo)</span></h3>
-        <div style="font-size:0.8rem; color:#555555; margin-bottom:10px;">Etiquetas para agrupar transacciones por palabras clave del histórico (subcategoría o descripción). Ej: tag "el peque" con patrón "Amadeo" suma todo lo gastado en el nene. <strong>Estos tags NO se sincronizan al spreadsheet ni al deploy público</strong>.</div>
+        <div style="font-size:0.8rem; color:#555555; margin-bottom:10px;">Etiquetas para agrupar transacciones por palabras clave del histórico (subcategoría o descripción). Ej: tag "colegio" con patrón "cuota" suma todo lo gastado en la escuela. <strong>Estos tags NO se sincronizan al spreadsheet ni al deploy público</strong>.</div>
         <div id="cfgTagsList" class="list-container" style="padding-bottom:10px;"></div>
         <button id="cfgTagsAddBtn" class="neu-flat" style="padding:10px; border-radius:10px; cursor:pointer; margin-bottom:20px; width:100%;" onclick="addPersonalTag()">+ Agregar tag personal</button>
 
@@ -1284,13 +1284,13 @@
         const IS_DEMO = !API_URL;
 
         // Anonimización del modo demo: el negocio aparece como "Emprendimiento"
-        // (con su ícono y abreviatura genéricos). En modo real (Martín/Lau)
+        // (con su ícono y abreviatura genéricos). En modo real (la instancia familiar)
         // se usan los nombres originales para no romper el hábito.
         const BIZ_NAME = IS_DEMO ? 'Emprendimiento' : 'Mar de Pan';
         const BIZ_ICON = IS_DEMO ? '💼' : '🥖';
         const BIZ_SHORT = IS_DEMO ? 'EMP' : 'MP';
 
-        // SCHEMA por defecto para modo real (Martín/Lau). El SCHEMA efectivo se
+        // SCHEMA por defecto para modo real (la instancia familiar). El SCHEMA efectivo se
         // carga desde localStorage/sheet si existe; si no, se usa este.
         const SCHEMA_PERSONAL = {
             Egreso: {
@@ -1335,7 +1335,7 @@
         // Tags personales: lista de strings (subcategorías o palabras clave en desc)
         // que el usuario quiere agrupar bajo un nombre amigable. Se guarda solo en
         // localStorage del usuario, NUNCA va al sheet ni al repo público.
-        // Estructura: [{ label: 'el peque', patterns: ['Amadeo'] }, ...]
+        // Estructura: [{ label: 'colegio', patterns: ['cuota'] }, ...]
         let PERSONAL_TAGS = IS_DEMO ? [] : (() => {
             try { return JSON.parse(localStorage.getItem('FINANZAS_PERSONAL_TAGS') || '[]'); }
             catch { return []; }
@@ -4037,7 +4037,7 @@
                 label: 'Nombre amigable'
             });
             if (!label || !label.trim()) return;
-            const patternsStr = await uiPrompt('La app sumará tx cuya subcategoría o descripción contenga alguno.\n\nEj: "Amadeo, Ama, escuela Ama"', {
+            const patternsStr = await uiPrompt('La app sumará tx cuya subcategoría o descripción contenga alguno.\n\nEj: "cuota, colegio, útiles"', {
                 title: 'Patrones a buscar',
                 label: 'Separados por coma'
             });
@@ -4271,7 +4271,7 @@
                 }
             }
 
-            // === LAU #2: días que quedan en el mes (solo si es mes en curso) ===
+            // === CO-USUARIA #2: días que quedan en el mes (solo si es mes en curso) ===
             if ((view === 'home' || view === 'history' || view === 'hogar') && isCurrentMonth) {
                 const daysLeft = daysInMonth - dayOfMonth;
                 if (daysLeft > 0 && daysLeft <= 25) {
@@ -4279,7 +4279,7 @@
                 }
             }
 
-            // === LAU #5: primer mes con reserva positiva (celebración de hito) ===
+            // === CO-USUARIA #5: primer mes con reserva positiva (celebración de hito) ===
             if (view === 'history' || view === 'home') {
                 const reserveNow = _hogarReserve();
                 if (reserveNow > 0 && closedMonths.length >= 2) {
@@ -4297,7 +4297,7 @@
                 }
             }
 
-            // === LAU #8: días sin cargar ninguna tx (recordatorio suave) ===
+            // === CO-USUARIA #8: días sin cargar ninguna tx (recordatorio suave) ===
             if (view === 'home' || view === 'history') {
                 if (TRANSACTIONS.length > 0) {
                     const sortedDates = TRANSACTIONS.map(t => parseDate(t.d)).filter(Boolean).sort();
@@ -4312,7 +4312,7 @@
                 }
             }
 
-            // === LAU #9: reparto Hogar vs MdP (% del flujo del mes) ===
+            // === CO-USUARIA #9: reparto Hogar vs MdP (% del flujo del mes) ===
             if ((view === 'home' || view === 'history') && lastMonth) {
                 const hogTot = monthTotals(lastMonth, 'hogar');
                 const mdpTot = monthTotals(lastMonth, 'mdp');
@@ -4325,7 +4325,7 @@
                 }
             }
 
-            // === LAU #11: ritmo de gasto vs días transcurridos (mes en curso, scope hogar) ===
+            // === CO-USUARIA #11: ritmo de gasto vs días transcurridos (mes en curso, scope hogar) ===
             if (view === 'hogar' && isCurrentMonth && monthProgress > 0.2 && monthProgress < 0.95) {
                 const cur = monthTotals(lastMonth, 'hogar');
                 const avgExp = _avgMonthlyHogarExp();
@@ -4338,7 +4338,7 @@
                 }
             }
 
-            // === LAU #4: categoría Hogar que viene creciendo 3 meses ===
+            // === CO-USUARIA #4: categoría Hogar que viene creciendo 3 meses ===
             if ((view === 'history' || view === 'hogar') && closedMonths.length >= 3) {
                 const last3 = closedMonths.slice(-3);
                 const catTotals = {}; // {category: [m1, m2, m3]}
@@ -4358,7 +4358,7 @@
                 });
             }
 
-            // === LAU #10: ahorro acumulado del año en curso ===
+            // === CO-USUARIA #10: ahorro acumulado del año en curso ===
             if (view === 'home' || view === 'history') {
                 const currentYear = today.getFullYear();
                 let yearInc = 0, yearExp = 0;
@@ -4620,7 +4620,7 @@
         async function renameDevice() {
             const v = await uiPrompt('Queda registrado en cada movimiento que cargues desde este dispositivo.', {
                 title: 'Nombre del dispositivo',
-                label: 'Ej: iPhone de Lau',
+                label: 'Ej: iPhone de casa',
                 defaultValue: DEVICE_NAME
             });
             if (v === null) return;

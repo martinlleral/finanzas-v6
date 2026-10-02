@@ -3,7 +3,7 @@
 importar_pendientes.py — mete al sheet los movimientos que quedaron atrapados
 en un dispositivo, a partir del CSV que exporta ⚙️ → "Bajar pendientes".
 
-POR QUÉ EXISTE: el 13/8/2026 el celular de Lau acumuló 18 movimientos que la
+POR QUÉ EXISTE: el 13/8/2026 un celular de la familia acumuló 18 movimientos que la
 app nunca logró subir ($[monto], de 11 días). El CSV de rescate los tenía
 completos; esto los devuelve al sheet sin depender de que la sincronización
 funcione.

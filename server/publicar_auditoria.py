@@ -4,7 +4,7 @@ publicar_auditoria.py — deja en el spreadsheet una pestaña "Auditoría" con l
 advertencias para leer estos datos y el estado del dato al día de hoy.
 
 POR QUÉ EXISTE: cualquiera que abra este sheet —un contador, un asesor
-financiero, Lau, vos dentro de seis meses— ve 590 filas de movimientos y no
+financiero, tu pareja, vos dentro de seis meses— ve 590 filas de movimientos y no
 tiene forma de saber que hay $[monto] contados dos veces, que los montos son
 nominales en un país con inflación alta, o que Mar de Pan recién aparece en
 febrero. Esas advertencias vivían en una conversación. Ahora viven al lado

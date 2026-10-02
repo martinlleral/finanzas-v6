@@ -209,8 +209,8 @@ const CASOS = [
 
   ['el origen se escribe en la columna I', () => {
     const h = montarEntorno([]);
-    post(Object.assign(tx('u1', 'Niñera'), { origen: 'iPhone de Lau' }));
-    return h.filas[0][8] === 'iPhone de Lau';
+    post(Object.assign(tx('u1', 'Niñera'), { origen: 'iPhone de prueba' }));
+    return h.filas[0][8] === 'iPhone de prueba';
   }],
 
   ['un cliente viejo sin origen no rompe nada', () => {
@@ -223,8 +223,8 @@ const CASOS = [
   ['getRawData devuelve el origen en el campo o', () => {
     montarEntorno([]);
     post(Object.assign(tx('u1', 'a'), { origen: 'Mac' }));
-    post(Object.assign(tx('u2', 'b'), { origen: 'iPhone de Lau' }));
-    return getRawData()[0].o === 'iPhone de Lau';
+    post(Object.assign(tx('u2', 'b'), { origen: 'iPhone de prueba' }));
+    return getRawData()[0].o === 'iPhone de prueba';
   }],
 
   ['INVARIANTE: el lock del servidor expira MUY antes del timeout del cliente', () => {
