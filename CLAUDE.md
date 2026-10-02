@@ -20,6 +20,8 @@ Aplicación web de finanzas personales para registrar ingresos y egresos, con si
 
 ## Deploy
 - Cliente: GitHub Pages via GitHub Actions → https://martinlleral.github.io/finanzas-v6
+- Instancia nueva (otra persona, su propia planilla): `ONBOARDING.md`.
+- Qué backend está publicado: `curl -sL "<API_URL>?action=ping"` devuelve la versión (desde el backend v8; uno anterior contesta `{"error":"Unauthorized"}`).
 - Backend: manual. Desplegar **el servidor primero**; ambas direcciones son compatibles (servidor v3 + cliente v2 funciona; cliente v3 + servidor v2 funciona degradado sin dedupe).
 
 ## Configuración
@@ -73,17 +75,19 @@ Es seguro para el uso diario: escribe solo en esa pestaña, tiene un assert de q
 ```bash
 node tools/sync-test.js index.html          # motor de sincronización — 5/5
 node tools/auth-test.js server/apps_script.gs     # autenticación — 11/11
-node tools/backend-test.js server/apps_script.gs  # backend contra hoja simulada — 16/16
+node tools/backend-test.js server/apps_script.gs  # backend contra hoja simulada — 29/29
+node tools/diag-test.js index.html          # el 🩺 de ⚙️ — 5/5
 node tools/layout-harness.js index.html     # layout — 0 fallas de 105 mediciones
 node tools/smoke-test.js index.html         # flujo end-to-end + calibración tipográfica
 ```
 
 - **`sync-test.js`** cubre los caminos donde un bug **no se ve**: la transacción se escribe dos veces o desaparece en silencio. Mockea el servidor y verifica el estado real de la cola, el buffer optimista y los POST. Contra el código previo a la v3 pasa **1 de 5** (el primero falla con `filasEnSheet: esperaba 1, hubo 2`, que es el bug reproducido).
 - **`auth-test.js`** mockea `PropertiesService` para correr `checkAuth_` fuera de Google. Contra la versión previa pasa **2 de 11**.
-- **`backend-test.js`** corre el `.gs` real contra un Google Sheets simulado: idempotencia por uid, validar-todo-antes-de-escribir, truncado de config vs descripción, lock ocupado, expansión de grilla, delete por uid. Es la otra mitad de `sync-test.js` (que prueba el cliente contra un servidor simulado). Contra el backend previo a la v7 pasa **0 de 16**.
+- **`backend-test.js`** corre el `.gs` real contra un Google Sheets simulado: idempotencia por uid, validar-todo-antes-de-escribir, truncado de config vs descripción, lock ocupado, expansión de grilla, delete por uid. Es la otra mitad de `sync-test.js` (que prueba el cliente contra un servidor simulado). Contra el backend previo a la v7 pasa **0 de 16** (hoy son 29 casos: se sumaron `instalar()`, `ping` y la versión en las respuestas).
+- **`diag-test.js`** prueba el diagnóstico de conexión contra un servidor simulado. Existe porque el 🩺 informó «IDEMPOTENCIA ❌ — puede duplicar» cuando el servidor no había duplicado: lo que había fallado era el segundo envío de la prueba. **Un diagnóstico que miente manda a buscar una falla que no existe.** Contra el cliente v7.6 pasa **2 de 5**.
 - **`layout-harness.js`**: 7 viewports × 10 vistas × 4 modales, con montos de 9 dígitos tipeados por la ruta real y stress de `$123.456.789`. **Assertion: 0 fallas.** Baseline del 31/7/2026 antes de los fixes: 105.
 
-**Correr los cinco antes de tocar el motor de sync, la auth o el CSS de layout.**
+**Correr los seis antes de tocar el motor de sync, la auth, el diagnóstico o el CSS de layout.** Ojo: `smoke-test.js` y `layout-harness.js` regeneran `shot-375-home.png`; si no cambió nada visual, descartarlo con `git checkout -- shot-375-home.png`.
 
 ## Seguridad: el token
 
@@ -91,5 +95,5 @@ node tools/smoke-test.js index.html         # flujo end-to-end + calibración ti
 
 - `verificarToken()` desde el editor dice si está configurado, sin revelarlo.
 - `setupToken()` genera y guarda uno nuevo (después hay que cargarlo en cada dispositivo desde ⚙️).
-- **Falla cerrado**: sin token configurado el script rechaza todo. Es deliberado — un servidor cerrado se nota en el primer uso, uno abierto no se nota nunca. Nada se pierde: el cliente encola y reintenta.
+- **Falla cerrado**: sin token configurado el script rechaza todo (la única excepción es `?action=ping`, que va antes de la autenticación y por eso no lee ni escribe la planilla: solo dice la versión y si hay token). Es deliberado — un servidor cerrado se nota en el primer uso, uno abierto no se nota nunca. Nada se pierde: el cliente encola y reintenta.
 - Chequeo externo: `curl "<API_URL>?action=getRawData&token=BASURA"` tiene que devolver `{"error":"Unauthorized"}`.

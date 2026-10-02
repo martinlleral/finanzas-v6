@@ -1,5 +1,13 @@
 # Deploy de la v3 — orden y verificaciones
 
+> **Este documento es la migración de una instancia que ya existía** (la que
+> tenía el token dentro del código). Para montar una instancia nueva desde
+> cero, con su propia planilla, ver [`ONBOARDING.md`](../ONBOARDING.md).
+>
+> Para saber qué versión del backend está publicada, sin token:
+> `curl -sL "<API_URL>?action=ping"`. Desde el backend v8 contesta la versión;
+> uno anterior contesta `{"error":"Unauthorized"}`.
+
 La v3 arregla los duplicados (columna H = uid + LockService) y el P0 de la
 sincronización de categorías. **El orden importa, y cada paso se verifica antes
 de seguir al siguiente.**
