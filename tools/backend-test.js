@@ -52,13 +52,14 @@ function montarEntorno(filasIniciales, opts = {}) {
       hoja.filas.push(v.slice());
     },
     deleteRow: (n) => { hoja.filas.splice(n - 1, 1); },
+    setName: (n) => { hoja.nombre = n; },
   };
 
   global.PropertiesService = { getScriptProperties: () => ({
     getProperty: k => (props[k] === undefined ? null : props[k]),
     setProperty: (k, v) => { props[k] = v; } }) };
   global.SpreadsheetApp = {
-    getActiveSpreadsheet: () => ({ getSheetByName: n => (n === 'Movimientos' ? sheet : null),
+    getActiveSpreadsheet: () => ({ getSheetByName: n => (n === (hoja.nombre || opts.nombre || 'Movimientos') ? sheet : null),
                                    getSheets: () => [sheet] }),
     flush: () => {} };
   global.LockService = { getScriptLock: () => ({
@@ -236,6 +237,52 @@ const CASOS = [
     const lock = +(/const LOCK_MS = (\d+)/.exec(gs) || [])[1];
     const post_ = +(/const POST_TIMEOUT_MS = (\d+)/.exec(cli) || [])[1];
     return lock > 0 && post_ > 0 && post_ >= lock * 3;
+  }],
+
+  // ── Instalación desde cero ────────────────────────────────────────────────
+  ['LA TRAMPA: en una planilla vacía sin instalar, el primer movimiento NO se ve', () => {
+    // No es el comportamiento deseado: es el que hay, y es la razón de instalar().
+    // Si algún día getRawData deja de saltear la fila 1, este caso avisa.
+    montarEntorno([]);
+    post(tx('u1', 'Primer gasto'));
+    return getRawData().length === 0;
+  }],
+
+  ['instalar() en una planilla nueva → el primer movimiento SÍ se ve', () => {
+    const h = montarEntorno([], { props: { SECRET_TOKEN: undefined }, nombre: 'Hoja 1' });
+    const r = instalar();
+    const token = PropertiesService.getScriptProperties().getProperty('SECRET_TOKEN');
+    const p = post(tx('u1', 'Primer gasto', { token }));
+    const filas = getRawData();
+    return r.tokenNuevo === true && h.nombre === 'Movimientos' && h.filas[0][7] === 'uid'
+        && p.ok === true && filas.length === 1 && filas[0].desc === 'Primer gasto';
+  }],
+
+  ['instalar() NO toca una hoja con datos ni reemplaza el token', () => {
+    const antes = ['2026-08-01', 'Egreso', 'HogarYVida', 'Familia', 8000, 'Niñera', '', ''];
+    const h = montarEntorno([antes]);
+    const r = instalar();
+    const token = PropertiesService.getScriptProperties().getProperty('SECRET_TOKEN');
+    return r.tokenNuevo === false && token === 'tok-de-prueba'
+        && h.filas.length === 1 && h.filas[0][5] === 'Niñera';
+  }],
+
+  ['ping contesta la versión SIN token, y no devuelve ningún dato', () => {
+    montarEntorno([['2026-08-01', 'Egreso', 'HogarYVida', 'Familia', 8000, 'Niñera', '', '']]);
+    const r = JSON.parse(doGet({ parameter: { action: 'ping' } }));
+    return r.ok === true && /^v\d+/.test(r.backend) && r.tokenConfigurado === true
+        && Object.keys(r).sort().join() === 'backend,ok,tokenConfigurado';
+  }],
+
+  ['ping NO abre la lectura: getRawData sin token sigue rechazado', () => {
+    montarEntorno([['x'], ['2026-08-01', 'Egreso', 'HogarYVida', 'Familia', 8000, 'Niñera', '', '']]);
+    const r = JSON.parse(doGet({ parameter: { action: 'getRawData' } }));
+    return r.error === 'Unauthorized';
+  }],
+
+  ['una escritura informa la versión del backend', () => {
+    montarEntorno([]);
+    return /^v\d+/.test(post(tx('u1', 'Niñera')).backend);
   }],
 
   ['una fila borrada libera su uid para un alta nueva', () => {

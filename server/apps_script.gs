@@ -1,5 +1,5 @@
 /**
- * Finanzas V6.2 — Google Apps Script backend (v3)
+ * Finanzas — backend en Google Apps Script
  *
  * EL TOKEN NO ESTÁ EN ESTE ARCHIVO, Y ES A PROPÓSITO.
  *
@@ -17,10 +17,18 @@
  * pasar: fallar cerrado se detecta en el primer uso, fallar abierto no se
  * detecta nunca.
  *
- * SETUP (una sola vez): ver setupToken y migrarTokenAPropiedades más abajo.
+ * INSTALACIÓN DESDE CERO: correr instalar() una vez (más abajo). Prepara la
+ *   hoja y genera el token.
+ * MIGRACIÓN desde la versión con el token en el código: migrarTokenAPropiedades.
  * ROTACIÓN: cambiar el valor de la propiedad SECRET_TOKEN y actualizarlo en
  *   cada dispositivo desde ⚙️ de la app. No hace falta redesplegar.
  */
+
+// Versión del backend. Viaja en cada respuesta de escritura y en ?action=ping,
+// para poder saber desde afuera QUÉ código está publicado. Sin esto, "el
+// backend publicado no es el del repo" solo se podía inferir de los síntomas.
+// Subirla cada vez que cambie algo que el cliente o un diagnóstico pueda notar.
+const BACKEND_VERSION = 'v8';
 
 const VALID_TYPES = ['Ingreso', 'Egreso', '__CONFIG__'];
 const MAX_BATCH = 50;
@@ -72,25 +80,35 @@ const LOCK_MS = 10000;
 /**
  * Instalación y estructura
  *
- * Instrucciones de instalación (se hace UNA sola vez):
- *   1) Abrir el spreadsheet "APP Familia" en Google Sheets
- *   2) Extensiones → Apps Script
- *   3) Seleccionar TODO el código existente y reemplazarlo por este archivo
- *   4) Guardar (disquete o Ctrl+S)
- *   5) Desplegar → Administrar implementaciones → editar (lápiz) la
- *      implementación existente → Versión: Nueva versión → Desplegar
- *   6) La URL (ya guardada en la app via ⚙️) NO cambia al redesplegar.
+ * Instalación desde cero (una sola vez; el paso a paso está en ONBOARDING.md):
+ *   1) Crear una planilla de Google vacía → Extensiones → Apps Script
+ *   2) Reemplazar TODO el código del editor por este archivo y guardar
+ *   3) Elegir `instalar` en el desplegable y ▶ Ejecutar (pide permiso una vez)
+ *   4) Implementar → Nueva implementación → Aplicación web → Ejecutar como: Yo,
+ *      Quién tiene acceso: Cualquier usuario → copiar la URL que termina en /exec
  *
- * Estructura del sheet (columnas A a H):
+ * Actualización de una instalación que ya funciona:
+ *   1) Reemplazar TODO el código por este archivo y guardar
+ *   2) Implementar → Administrar implementaciones → editar (lápiz) la
+ *      existente → Versión: Nueva versión → Implementar
+ *   3) La URL NO cambia al redesplegar. "Nueva implementación" sí crea otra
+ *      URL: los dispositivos seguirían apuntando al código viejo.
+ *
+ * Estructura del sheet (columnas A a I):
  *   A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago | H uid | I origen
  *
- * OJO: el sheet NO tiene fila de header. La fila 1 es un movimiento real (con
- * el texto "Forma de Pago" pegado en G1 por un bug viejo de ensurePaymentColumn_,
- * que ya no se llama). getRawData() la saltea, así que ese movimiento es
- * invisible para la app. No escribir nada en la fila 1.
+ * LA FILA 1 NO SE LEE: getRawData() la saltea siempre. En una instalación
+ * nueva, instalar() pone ahí los títulos de las columnas. En una planilla
+ * anterior a instalar() puede haber un movimiento real en la fila 1 (con el
+ * texto "Forma de Pago" pegado en G1 por un bug viejo de ensurePaymentColumn_,
+ * que ya no se llama): ese movimiento es invisible para la app. No escribir
+ * nada en la fila 1 de una planilla que ya tiene datos.
  *
  * Endpoints GET:
- *   ?action=getRawData             → devuelve todas las transacciones como JSON
+ *   ?action=getRawData&token=…     → devuelve todas las transacciones como JSON
+ *   ?action=ping                   → versión del backend y si hay token. Sin
+ *                                    token y sin datos: sirve para comprobar
+ *                                    que la URL llega a ESTE script.
  *
  * Endpoints POST (body JSON):
  *   {action:'addTransaction', ...}           → agrega una fila
@@ -101,9 +119,8 @@ const LOCK_MS = 10000;
  * La firma es un objeto con {d, t, c, s, a, desc} que identifica unívocamente
  * la fila a tocar. El matching se hace por igualdad exacta de todos los campos.
  *
- * NOTA de seguridad: este script asume que sólo los usuarios con acceso al
- * spreadsheet lo invocan. No hay autenticación propia — confía en el link
- * de deploy siendo privado.
+ * Seguridad: todo pedido (salvo ping, que no lee ni escribe) lleva el token.
+ * La URL sola no alcanza para leer ni para escribir. Ver checkAuth_.
  */
 
 /* ---------- Helpers ---------- */
@@ -340,6 +357,7 @@ function addTransactionsAtomic_(bodies) {
     // de su cola cosas que el servidor nunca escribió.
     return {
       ok: true,
+      backend: BACKEND_VERSION,
       written: rows.length,
       writtenUids: rows.map(function (r) { return r[UID_COL - 1]; }).filter(String),
       skipped: skipped
@@ -481,7 +499,59 @@ function checkAuth_(e) {
  * Después de correrla, ya podés pegar este archivo entero sin riesgo.
  */
 
-/** Genera y guarda un token nuevo. Para el setup inicial o para rotar. */
+/**
+ * INSTALACIÓN DESDE CERO — correr una vez desde el editor, antes de publicar.
+ *
+ * Hace las dos cosas que una planilla nueva necesita, y ninguna de las dos se
+ * nota si falta:
+ *
+ * 1) Los títulos en la fila 1. getRawData() saltea la fila 1 SIEMPRE. En una
+ *    planilla vacía, el primer movimiento que se carga cae justo ahí: se
+ *    escribe bien, el servidor contesta ok, y la app no lo muestra nunca más.
+ *    Con los títulos puestos, el primer movimiento cae en la fila 2.
+ * 2) El token. Sin token el script rechaza todo (falla cerrado).
+ *
+ * Es segura de volver a correr: no toca una hoja que ya tiene algo escrito y
+ * no reemplaza un token que ya existe (para rotarlo está setupToken).
+ */
+const TITULOS = ['Fecha', 'Tipo', 'Categoría', 'Subcategoría', 'Monto',
+                 'Descripción', 'Forma de Pago', 'uid', 'origen'];
+
+function instalar() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Movimientos');
+  let hoja = 'ya existía la pestaña "Movimientos"';
+  if (!sheet) {
+    sheet = ss.getSheets()[0];
+    if (sheet.getLastRow() === 0) {
+      // Con nombre propio, agregar o reordenar pestañas después no desvía
+      // al script hacia otra hoja.
+      sheet.setName('Movimientos');
+      hoja = 'la primera pestaña pasó a llamarse "Movimientos"';
+    } else {
+      hoja = 'se usa la primera pestaña tal como está (ya tenía datos)';
+    }
+  }
+  let titulos = 'la hoja ya tenía contenido: no se tocó la fila 1';
+  if (sheet.getLastRow() === 0) {
+    ensureColumns_(sheet);
+    sheet.appendRow(TITULOS);
+    titulos = 'títulos escritos en la fila 1';
+  }
+  let token = getToken_();
+  const tokenNuevo = !token;
+  if (tokenNuevo) token = setupToken();
+  Logger.log('INSTALACIÓN LISTA (backend ' + BACKEND_VERSION + ')\n'
+           + '· Hoja: ' + hoja + '; ' + titulos + '.\n'
+           + '· Token: ' + (tokenNuevo
+               ? 'generado. Es este, copialo:\n\n' + token + '\n'
+               : 'ya había uno configurado y no se cambió.') + '\n'
+           + 'Falta publicar: Implementar → Nueva implementación → Aplicación web → '
+           + 'Ejecutar como: Yo · Quién tiene acceso: Cualquier usuario.');
+  return { hoja: hoja, titulos: titulos, tokenNuevo: tokenNuevo };
+}
+
+/** Genera y guarda un token nuevo. Para rotarlo (la instalación usa instalar). */
 function setupToken() {
   const nuevo = Utilities.getUuid().replace(/-/g, '')
               + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
@@ -564,12 +634,20 @@ function normalizeDateColumn() {
 /* ---------- Entrypoints ---------- */
 
 function doGet(e) {
+  const action = (e && e.parameter && e.parameter.action) || '';
+  // ping va ANTES de la autenticación, a propósito, y por eso no puede leer
+  // ni escribir nada de la planilla. Contesta solo qué código está publicado
+  // y si el token existe: lo necesario para distinguir, desde afuera y sin
+  // credenciales, "la URL no llega a este script" de "llega y me rechaza".
+  if (action === 'ping') {
+    return jsonResponse({ ok: true, backend: BACKEND_VERSION,
+                          tokenConfigurado: !!getToken_() });
+  }
   try {
     checkAuth_(e);
   } catch (err) {
     return jsonResponse({ error: 'Unauthorized' });
   }
-  const action = (e && e.parameter && e.parameter.action) || '';
   if (action === 'getRawData') {
     return jsonResponse(getRawData());
   }
