@@ -791,8 +791,8 @@
                         class="stat-val income">$0</span></div>
                 <div class="stat-item"><span class="stat-label">Total Egresos</span><span id="globExp"
                         class="stat-val expense">$0</span></div>
-                <div class="stat-item" style="grid-column: span 2" title="Suma de todos los ingresos menos todos los egresos registrados (MdP + Hogar combinados).">
-                    <span class="stat-label">Caja Consolidada</span>
+                <div class="stat-item" id="globBalItem" style="grid-column: span 2" title="Suma de todos los ingresos menos todos los egresos registrados (MdP + Hogar combinados).">
+                    <span class="stat-label" id="globBalLabel">Caja Consolidada</span>
                     <span id="globBal" class="stat-val balance" aria-label="Caja Consolidada: suma de ingresos menos egresos de MdP y Hogar">$0</span>
                 </div>
             </div>
@@ -1231,7 +1231,7 @@
            de iOS cachean fuerte, así que un dispositivo puede quedar semanas en
            una versión vieja mientras otro ya tiene la nueva, y el síntoma es el
            mismo. Bumpearla en cada deploy que toque el motor de sync. */
-        const APP_VERSION = 'v7.7';
+        const APP_VERSION = 'v7.8';
 
         /* Identidad del ALMACENAMIENTO, no del teléfono.
          *
@@ -1290,8 +1290,10 @@
         const BIZ_ICON = IS_DEMO ? '💼' : '🥖';
         const BIZ_SHORT = IS_DEMO ? 'EMP' : 'MP';
 
-        // SCHEMA por defecto para modo real (la instancia familiar). El SCHEMA efectivo se
-        // carga desde localStorage/sheet si existe; si no, se usa este.
+        // Esquema de la instancia familiar, la única con módulo de negocio en la
+        // fase A. Ya NO es el default de una instancia nueva: solo lo usa
+        // "Restaurar defaults" cuando el negocio está activo. El SCHEMA efectivo
+        // se carga desde localStorage/sheet si existe.
         const SCHEMA_PERSONAL = {
             Egreso: {
                 'Alimentación': ['Supermercado', 'Restaurantes', 'Verdulería', 'Carnicería'],
@@ -1321,7 +1323,29 @@
             }
         };
 
-        const SCHEMA_DEFAULT = IS_DEMO ? SCHEMA_DEMO : SCHEMA_PERSONAL;
+        /* Esquema con el que arranca una instancia NUEVA en modo real: solo
+         * hogar, sin negocio. Es lo que ve una familia o una pareja que monta
+         * su propia planilla. Genérico a propósito: las categorías de una casa
+         * dicen bastante de quien la habita, así que acá no va ninguna real.
+         * Sin categoría de negocio, negocioActivo() da false y la app esconde
+         * el módulo entero. */
+        const SCHEMA_HOGAR = {
+            Egreso: {
+                'Alimentación': ['Supermercado', 'Verdulería', 'Carnicería', 'Panadería', 'Delivery'],
+                'Hogar': ['Alquiler', 'Expensas', 'Luz', 'Gas', 'Agua', 'Internet', 'Celular', 'Mantenimiento', 'Limpieza'],
+                'Salud': ['Prepaga', 'Farmacia', 'Consultas'],
+                'Movilidad': ['Transporte', 'Nafta', 'Seguro', 'Mecánica', 'Peajes'],
+                'Familia': ['Colegio', 'Actividades', 'Indumentaria', 'Regalos', 'Mascota'],
+                'Salidas': ['Restaurantes', 'Cultura', 'Viajes', 'Vacaciones'],
+                'Varios': [],
+            },
+            Ingreso: {
+                'Sueldo': ['Sueldo', 'Aguinaldo', 'Freelance', 'Changas'],
+                'Otros': ['Devoluciones', 'Regalos', 'Ventas', 'Otros']
+            }
+        };
+
+        const SCHEMA_DEFAULT = IS_DEMO ? SCHEMA_DEMO : SCHEMA_HOGAR;
 
         // Alias por defecto para agrupar variantes históricas
         // NOTA: los alias aplican a nombres de CATEGORÍA, no de subcategoría.
@@ -1370,6 +1394,53 @@
         let ALIASES = IS_DEMO
             ? {...ALIASES_DEFAULT}
             : (JSON.parse(localStorage.getItem('FINANZAS_ALIASES')) || {...ALIASES_DEFAULT});
+
+        /* ─── Módulos ─────────────────────────────────────────────────────────
+         *
+         * Fase A: el único módulo opcional es el NEGOCIO. Está activo si el
+         * esquema de categorías tiene la categoría del negocio, y nada más.
+         *
+         * Por qué se infiere del esquema y no de una bandera propia: el esquema
+         * ya viaja con la planilla y ya está en todos los dispositivos, así que
+         * la instancia familiar (que lo tiene) sigue igual sin migrar nada, y
+         * una instancia nueva (que arranca con SCHEMA_HOGAR) nace sin negocio.
+         * Una bandera explícita que se elija al empezar es la fase B, y entra
+         * por esta misma función: todo lo que depende del módulo pregunta acá.
+         *
+         * En la demo (SCHEMA_DEMO trae 'Emprendimiento') el negocio queda
+         * activo: el portafolio sigue mostrando la app completa. */
+        function negocioActivo() {
+            const cats = Object.keys((SCHEMA && SCHEMA.Egreso) || {})
+                .concat(Object.keys((SCHEMA && SCHEMA.Ingreso) || {}));
+            return cats.some(c => c === BIZ_NAME || c === 'Mar de Pan' || c === 'MarDePan');
+        }
+
+        /* Acomoda la pantalla al módulo. Se llama al arrancar y cada vez que
+         * el esquema cambia (sincronización o edición), porque un dispositivo
+         * puede arrancar sin esquema y recibir el de la planilla segundos
+         * después: el negocio tiene que aparecer sin recargar. */
+        function aplicarModulos() {
+            const negocio = negocioActivo();
+            const nav = document.getElementById('bizNavBtn');
+            if (nav) nav.style.display = negocio ? '' : 'none';
+            const filtro = document.getElementById('bizFilterBtn');
+            if (filtro) filtro.style.display = negocio ? '' : 'none';
+            const lbl = document.getElementById('globBalLabel');
+            if (lbl) lbl.textContent = negocio ? 'Caja Consolidada' : 'Balance Total';
+            const item = document.getElementById('globBalItem');
+            if (item) item.title = negocio
+                ? 'Suma de todos los ingresos menos todos los egresos registrados (' + BIZ_SHORT + ' + Hogar combinados).'
+                : 'Suma de todos los ingresos menos todos los egresos registrados.';
+            const bal = document.getElementById('globBal');
+            if (bal) bal.setAttribute('aria-label', negocio
+                ? 'Caja Consolidada: suma de ingresos menos egresos de ' + BIZ_SHORT + ' y Hogar'
+                : 'Balance total: suma de ingresos menos egresos');
+            if (!negocio && currentHistFilter === 'mdp') currentHistFilter = 'total';
+            if (!IS_DEMO) document.title = negocio ? 'Finanzas Emprendimiento/Hogar' : 'Finanzas del Hogar';
+            // Si el negocio se apagó con su vista abierta (edición de categorías), salir de ahí.
+            const vista = document.getElementById('marDePanView');
+            if (!negocio && vista && vista.classList.contains('active')) goBack();
+        }
         const QUOTES = [
             "El orden es la base de la abundancia.",
             "El único bunker es la organización.",
@@ -1571,7 +1642,7 @@
         }
 
         function isExtractionLegacy(t) {
-            if (!t) return false;
+            if (!t || !negocioActivo()) return false;
             // Convención "Sueldo Transición" en MdP/Sueldos (anclada + umbral)
             if ((t.c === 'MarDePan' || t.c === 'Mar de Pan' || t.c === BIZ_NAME)
                 && t.t === 'Egreso'
@@ -1588,7 +1659,7 @@
 
         function isExtractionExp(t) {
             // Es egreso del negocio que representa retiro del dueño
-            if (!t || t.t !== 'Egreso') return false;
+            if (!t || t.t !== 'Egreso' || !negocioActivo()) return false;
             if (!(t.c === BIZ_NAME || t.c === 'Mar de Pan' || t.c === 'MarDePan')) return false;
             if (t.s === 'Extracción') return true;
             // Legacy: sueldos con descripción "Sueldo Transición" anclada + umbral
@@ -1600,7 +1671,7 @@
 
         function isExtractionInc(t) {
             // Es ingreso del hogar que representa retiro del negocio (otro lado del par)
-            if (!t || t.t !== 'Ingreso') return false;
+            if (!t || t.t !== 'Ingreso' || !negocioActivo()) return false;
             if (t.c === 'Hogar' && (t.s === 'Extracción' || t.s === 'Panadería')) return true;
             return false;
         }
@@ -1908,6 +1979,7 @@
             // - Ingreso del Hogar con subcategoría "Extracción"
             // Marcamos ambas filas con un tag en desc para trazabilidad.
             const isExtraction = (
+                negocioActivo() &&
                 currentTx.type === 'Egreso' &&
                 currentTx.subcategory === 'Extracción'
             );
@@ -2360,6 +2432,7 @@
                 try {
                     SCHEMA = JSON.parse(b64ToJson(latest.schema.desc || ''));
                     localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
+                    aplicarModulos();
                 } catch (e) {
                     console.warn('Config schema corrupta:', e);
                     // NO silencioso: esta falla dejó las categorías sin sincronizar
@@ -3182,6 +3255,7 @@
                 document.getElementById('syncBtn').style.pointerEvents = 'none';
                 applyDemoLabels();
             }
+            aplicarModulos();
             // Mostrar inmediatamente pendientes (de sesiones anteriores) y procesar
             updatePendingIndicator();
             if (PENDING_QUEUE.length > 0) processPendingQueue();
@@ -3211,7 +3285,7 @@
             navigate('historyView');
         }
         async function openTrends() { await fetchData(); navigate('trendsView'); }
-        async function openMarDePan() { await fetchData(); navigate('marDePanView'); }
+        async function openMarDePan() { if (!negocioActivo()) return; await fetchData(); navigate('marDePanView'); }
         async function openHogar() { await fetchData(); navigate('hogarView'); }
         function openConfig() { navigate('configView'); renderConfig(); }
 
@@ -4096,6 +4170,7 @@
                 const r2 = await saveConfigToSheet('aliases', ALIASES);
                 // Re-procesar con nuevas categorías/aliases
                 processHistory();
+                aplicarModulos();
                 hideLoader();
                 // Si algo no subió, decirlo. Antes se mostraba "Configuración
                 // guardada" igual, pisando el aviso de fallo: el usuario creía
@@ -4126,8 +4201,13 @@
                 danger: true
             });
             if (!ok) return;
-            SCHEMA = JSON.parse(JSON.stringify(SCHEMA_DEFAULT));
+            // En la instancia con negocio, "defaults" es su esquema; en una de
+            // hogar, el genérico. Si acá se usara SCHEMA_DEFAULT a secas, restaurar
+            // en la instancia familiar apagaría el negocio y lo subiría al sheet.
+            SCHEMA = JSON.parse(JSON.stringify(IS_DEMO ? SCHEMA_DEMO
+                                               : (negocioActivo() ? SCHEMA_PERSONAL : SCHEMA_HOGAR)));
             ALIASES = {...ALIASES_DEFAULT};
+            aplicarModulos();
             renderConfig();
         }
 
@@ -4313,7 +4393,7 @@
             }
 
             // === CO-USUARIA #9: reparto Hogar vs MdP (% del flujo del mes) ===
-            if ((view === 'home' || view === 'history') && lastMonth) {
+            if (negocioActivo() && (view === 'home' || view === 'history') && lastMonth) {
                 const hogTot = monthTotals(lastMonth, 'hogar');
                 const mdpTot = monthTotals(lastMonth, 'mdp');
                 const totalIngresos = hogTot.inc + mdpTot.inc;

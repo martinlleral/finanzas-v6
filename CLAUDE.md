@@ -28,6 +28,7 @@ Aplicación web de finanzas personales para registrar ingresos y egresos, con si
 - `API_URL`: vacía por defecto, así la app arranca en modo local/offline y no
   necesita backend para probarla
 - `SCHEMA`: configurable con categorías y subcategorías
+- **Módulos (fase A):** el negocio está activo solo si el esquema tiene su categoría (`negocioActivo()`). Una instancia nueva arranca con `SCHEMA_HOGAR` y no ve nada del negocio; la familiar lo tiene en su esquema sincronizado y no se migra. Todo lo que depende del módulo pregunta por esa función: la fase B (elegir módulos al empezar) entra por ahí.
 - ⚠️ **`SCHEMA_DEMO` va con categorías genéricas de ejemplo.** Es el esquema que
   ve cualquiera que abra la demo: no poner ahí las categorías de una instancia
   real, aunque parezcan inocuas (un árbol de categorías dice bastante sobre la
@@ -77,6 +78,7 @@ node tools/sync-test.js index.html          # motor de sincronización — 5/5
 node tools/auth-test.js server/apps_script.gs     # autenticación — 11/11
 node tools/backend-test.js server/apps_script.gs  # backend contra hoja simulada — 29/29
 node tools/diag-test.js index.html          # el 🩺 de ⚙️ — 5/5
+node tools/hogar-test.js index.html         # módulos: modo hogar vs instancia familiar — 8/8
 node tools/layout-harness.js index.html     # layout — 0 fallas de 105 mediciones
 node tools/smoke-test.js index.html         # flujo end-to-end + calibración tipográfica
 ```
@@ -85,9 +87,10 @@ node tools/smoke-test.js index.html         # flujo end-to-end + calibración ti
 - **`auth-test.js`** mockea `PropertiesService` para correr `checkAuth_` fuera de Google. Contra la versión previa pasa **2 de 11**.
 - **`backend-test.js`** corre el `.gs` real contra un Google Sheets simulado: idempotencia por uid, validar-todo-antes-de-escribir, truncado de config vs descripción, lock ocupado, expansión de grilla, delete por uid. Es la otra mitad de `sync-test.js` (que prueba el cliente contra un servidor simulado). Contra el backend previo a la v7 pasa **0 de 16** (hoy son 29 casos: se sumaron `instalar()`, `ping` y la versión en las respuestas).
 - **`diag-test.js`** prueba el diagnóstico de conexión contra un servidor simulado. Existe porque el 🩺 informó «IDEMPOTENCIA ❌ — puede duplicar» cuando el servidor no había duplicado: lo que había fallado era el segundo envío de la prueba. **Un diagnóstico que miente manda a buscar una falla que no existe.** Contra el cliente v7.6 pasa **2 de 5**.
+- **`hogar-test.js`** prueba los módulos: una instancia nueva nace sin negocio, la familiar sigue igual, y el negocio aparece sin recargar cuando la sincronización trae su esquema. Contra la v7.7 pasa **1 de 8**.
 - **`layout-harness.js`**: 7 viewports × 10 vistas × 4 modales, con montos de 9 dígitos tipeados por la ruta real y stress de `$123.456.789`. **Assertion: 0 fallas.** Baseline del 31/7/2026 antes de los fixes: 105.
 
-**Correr los seis antes de tocar el motor de sync, la auth, el diagnóstico o el CSS de layout.** Ojo: `smoke-test.js` y `layout-harness.js` regeneran `shot-375-home.png`; si no cambió nada visual, descartarlo con `git checkout -- shot-375-home.png`.
+**Correr los siete antes de tocar el motor de sync, la auth, el diagnóstico, los módulos o el CSS de layout.** Ojo: `smoke-test.js` y `layout-harness.js` regeneran `shot-375-home.png`; si no cambió nada visual, descartarlo con `git checkout -- shot-375-home.png`.
 
 ## Seguridad: el token
 
