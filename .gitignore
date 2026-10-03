@@ -22,5 +22,7 @@ server/.dedupe_config.json
 server/__pycache__/
 
 # Documentos de trabajo locales — no se versionan en este repo.
-HANDOFF.md
+# Los handoffs llevan fecha en el nombre y su foto del estado al lado.
+HANDOFF*.md
 EMPAQUETADO.md
+foto-*.txt
