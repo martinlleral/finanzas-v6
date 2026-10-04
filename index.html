@@ -1409,18 +1409,45 @@
          *
          * En la demo (SCHEMA_DEMO trae 'Emprendimiento') el negocio queda
          * activo: el portafolio sigue mostrando la app completa. */
+        /* ¿Esta categoría es la del negocio? Mira el movimiento, no el modo
+         * global: la confirmación de un movimiento puede quedar abierta
+         * mientras la sincronización cambia el esquema, y lo que el usuario
+         * eligió no puede cambiar de significado por eso.
+         * Reconoce también el nombre nuevo de una categoría del negocio
+         * renombrada: renombrar deja el alias viejo→nuevo, y sin seguirlo el
+         * renombre apagaba el módulo. OJO: el resto de la clasificación
+         * (isMdpExpense y compañía) todavía compara con los nombres fijos;
+         * eso es la fase B (nombre del negocio configurable). */
+        const NOMBRES_NEGOCIO = [BIZ_NAME, 'Mar de Pan', 'MarDePan'];
+        function esCategoriaNegocio(c) {
+            if (!c) return false;
+            if (NOMBRES_NEGOCIO.includes(c)) return true;
+            return NOMBRES_NEGOCIO.some(n => {
+                // Se sigue la cadena (renombrada dos veces), con tope por si
+                // alguien armó un ciclo a mano desde ⚙️.
+                for (let x = n, i = 0; ALIASES[x] && i < 10; i++) {
+                    x = ALIASES[x];
+                    if (x === c) return true;
+                }
+                return false;
+            });
+        }
+
         function negocioActivo() {
             const cats = Object.keys((SCHEMA && SCHEMA.Egreso) || {})
                 .concat(Object.keys((SCHEMA && SCHEMA.Ingreso) || {}));
-            return cats.some(c => c === BIZ_NAME || c === 'Mar de Pan' || c === 'MarDePan');
+            return cats.some(esCategoriaNegocio);
         }
 
         /* Acomoda la pantalla al módulo. Se llama al arrancar y cada vez que
          * el esquema cambia (sincronización o edición), porque un dispositivo
          * puede arrancar sin esquema y recibir el de la planilla segundos
          * después: el negocio tiene que aparecer sin recargar. */
+        let _negocioAplicado = null;   // estado del módulo en la última llamada
         function aplicarModulos() {
             const negocio = negocioActivo();
+            const cambio = _negocioAplicado !== null && _negocioAplicado !== negocio;
+            _negocioAplicado = negocio;
             const nav = document.getElementById('bizNavBtn');
             if (nav) nav.style.display = negocio ? '' : 'none';
             const filtro = document.getElementById('bizFilterBtn');
@@ -1440,6 +1467,14 @@
             // Si el negocio se apagó con su vista abierta (edición de categorías), salir de ahí.
             const vista = document.getElementById('marDePanView');
             if (!negocio && vista && vista.classList.contains('active')) goBack();
+            // Si el módulo cambió y los movimientos no (una sincronización que
+            // trae solo el esquema), nada más redibuja: quedaban los importes
+            // del filtro anterior y los avisos de la caché, que solo se
+            // invalida cuando cambian los movimientos.
+            if (cambio) {
+                _insightsCache.key = null;
+                _rerenderActiveView();
+            }
         }
         const QUOTES = [
             "El orden es la base de la abundancia.",
@@ -1978,10 +2013,13 @@
             // - Egreso del negocio (tx original)
             // - Ingreso del Hogar con subcategoría "Extracción"
             // Marcamos ambas filas con un tag en desc para trazabilidad.
+            // Se decide por la categoría elegida, no por negocioActivo(): si el
+            // esquema cambió con la confirmación abierta, el par se perdía y la
+            // extracción quedaba como un egreso simple.
             const isExtraction = (
-                negocioActivo() &&
                 currentTx.type === 'Egreso' &&
-                currentTx.subcategory === 'Extracción'
+                currentTx.subcategory === 'Extracción' &&
+                esCategoriaNegocio(currentTx.category)
             );
 
             const txsToCommit = [newTx];
@@ -2389,6 +2427,12 @@
         // Marker para distinguir filas de configuración de transacciones reales
         const CONFIG_MARKER = '__CONFIG__';
         let _avisoConfigDado = false;   // el aviso de config dañada va 1 vez por sesión
+        // ¿Esta sesión ya leyó la planilla? Hasta que lo haga, el esquema que
+        // hay en memoria puede ser el genérico (un dispositivo sin caché cuya
+        // primera lectura falló), y guardarlo pisaría el de la casa: en la
+        // instancia familiar apagaría el negocio en todos los dispositivos.
+        // Una planilla vacía cuenta como leída: una instancia nueva guarda igual.
+        let _planillaLeida = false;
 
         // Extrae filas de config del raw, aplica la más reciente y devuelve las transacciones limpias
         function extractConfig(raw) {
@@ -2539,6 +2583,7 @@
 
                 // Extraer configuración y separar transacciones reales
                 const cleanTxs = extractConfig(raw);
+                _planillaLeida = true;
 
                 // ¿Qué transacciones ya aterrizaron en el sheet?
                 const sigOf = (t) => `${t.d}|${t.t}|${t.c}|${t.s}|${t.a}|${t.desc}`;
@@ -4164,6 +4209,15 @@
         }
 
         async function saveConfig() {
+            if (API_URL && !_planillaLeida) {
+                // No se reintenta la lectura acá: traería el esquema de la
+                // planilla y borraría lo que se acaba de editar sin avisar.
+                await uiAlert(
+                    'Todavía no pude leer la planilla, y guardar ahora podría pisar las categorías '
+                    + 'de los otros dispositivos. Cuando haya conexión tocá 🔄 y volvé a guardar.',
+                    'Primero hay que sincronizar');
+                return;
+            }
             showLoader();
             try {
                 const r1 = await saveConfigToSheet('schema', SCHEMA);

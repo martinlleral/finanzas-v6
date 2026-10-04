@@ -12,6 +12,8 @@
  *
  * Contra el cliente v7.7 pasa 1 de 8. El primer caso falla por lo que importa:
  * una instancia nueva veía el negocio y las categorías de la instancia familiar.
+ * Contra la v7.8 anterior a los cuatro arreglos de la revisión adversarial pasa
+ * 9 de 14: fallan justo los cinco casos que los prueban.
  */
 const { chromium } = require('/opt/homebrew/lib/node_modules/playwright');
 const path = require('path');
@@ -127,6 +129,121 @@ const CASOS = [
     porque: 'El portafolio público muestra todas las funciones.',
   },
   {
+    nombre: 'Sin esquema guardado y la primera lectura falla → guardar NO sube el esquema genérico',
+    api: true, filas: 'familiar', lecturaFalla: true,
+    accion: async (page) => {
+      await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
+    },
+    ver: (e, x) => [
+      [x.enviosDeConfig === 0, 'no puede salir ningún envío de config (salieron ' + x.enviosDeConfig + ')'],
+      [x.negocioEnLaPlanilla === true, 'la planilla tiene que conservar el esquema con el negocio'],
+    ],
+    extra: (page) => page.evaluate(() => ({
+      enviosDeConfig: window.__posts.filter(b => b.type === '__CONFIG__').length,
+      negocioEnLaPlanilla: (() => {
+        const cfg = window.__filas.filter(r => r.t === '__CONFIG__' && r.c === 'schema').pop();
+        return !!cfg && /Mar de Pan/.test(new TextDecoder().decode(Uint8Array.from(atob(cfg.desc), c => c.charCodeAt(0))));
+      })(),
+    })),
+    porque: 'Un teléfono nuevo de la familia sin señal en la primera lectura tiene el esquema genérico: si lo guarda, apaga el negocio en toda la casa.',
+  },
+  {
+    nombre: 'Instancia nueva: leyó la planilla vacía → guardar sí sube el esquema',
+    api: true, filas: 'vacia',
+    accion: async (page) => {
+      await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
+    },
+    ver: (e, x) => [[x.esquemasEnLaPlanilla === 1, 'la planilla tiene que recibir el esquema (tiene ' + x.esquemasEnLaPlanilla + ')']],
+    extra: (page) => page.evaluate(() => ({
+      esquemasEnLaPlanilla: window.__filas.filter(r => r.t === '__CONFIG__' && r.c === 'schema').length,
+    })),
+    porque: 'Control del anterior: la guarda espera una lectura, no una planilla con datos. Una instancia nueva tiene que poder guardar.',
+  },
+  {
+    nombre: 'Extracción elegida y el esquema cambia antes de confirmar → igual se guardan los dos movimientos',
+    api: true, filas: 'familiar',
+    accion: async (page) => {
+      await page.evaluate(async (sinNegocio) => {
+        currentTx = { type: 'Egreso', category: 'Mar de Pan', subcategory: 'Extracción', amount: 1000, desc: '', paymentMethod: '' };
+        // Otro dispositivo guardó un esquema sin el negocio mientras la confirmación estaba abierta.
+        window.__filas.push({ d: '2026-09-30', t: '__CONFIG__', c: 'schema', s: '', a: 0, desc: sinNegocio, p: '', u: '' });
+        await fetchSync();
+        submitFinal();
+      }, b64(ESQUEMA_SOLO_HOGAR));
+      await page.waitForTimeout(1000);
+    },
+    ver: (e, x) => [
+      [x.movimientos.length === 2, 'tienen que salir dos movimientos, el egreso y su ingreso al hogar (salieron ' + x.movimientos.length + ')'],
+      [x.movimientos.some(m => m.type === 'Ingreso' && m.category === 'Hogar' && m.subcategory === 'Extracción'), 'falta el ingreso al hogar del par'],
+    ],
+    extra: (page) => page.evaluate(() => ({
+      movimientos: window.__posts.filter(b => b.type !== '__CONFIG__')
+        .flatMap(b => b.action === 'addTransactions' ? b.txs : [b]),
+    })),
+    porque: 'Una extracción guardada como egreso simple saca plata del negocio que nunca entra a la casa: el balance del hogar queda mal sin que nadie lo vea.',
+  },
+  {
+    nombre: 'Instancia familiar: renombrar la categoría del negocio → el módulo sigue',
+    api: true, filas: 'familiar',
+    accion: async (page) => {
+      await page.evaluate(async () => {
+        window.uiPrompt = async () => 'La Panadería';
+        await renameCategory('Egreso', 'Mar de Pan');
+        await renameCategory('Ingreso', 'Mar de Pan');
+      });
+    },
+    ver: (e) => [
+      [e.categorias.includes('La Panadería'), 'el renombre tiene que haberse aplicado'],
+      [e.negocio === true, 'negocioActivo() tiene que seguir dando true'],
+      [e.navNegocio, 'el botón del negocio sigue visible'],
+    ],
+    porque: 'Renombrar es editar, no apagar: el alias viejo→nuevo dice que sigue siendo el negocio.',
+  },
+  {
+    nombre: 'Renombrada la categoría del negocio, «Restaurar defaults» lo conserva',
+    api: true, filas: 'familiar',
+    accion: async (page) => {
+      await page.evaluate(async () => {
+        window.uiPrompt = async () => 'La Panadería';
+        window.uiConfirm = async () => true;
+        await renameCategory('Egreso', 'Mar de Pan');
+        await renameCategory('Ingreso', 'Mar de Pan');
+        await restoreDefaults();
+      });
+    },
+    ver: (e) => [[e.negocio === true && e.categorias.includes('Mar de Pan'), 'restaurar tiene que volver al esquema con el negocio']],
+    porque: 'Si el renombre apagaba el módulo, restaurar elegía el esquema de hogar y, al guardar, lo subía a la planilla de la casa.',
+  },
+  {
+    nombre: 'Histórico filtrado por negocio y la sincronización trae solo un esquema sin negocio → se redibuja',
+    api: true, filas: 'familiar',
+    accion: async (page) => {
+      await page.evaluate(async (sinNegocio) => {
+        await openHistory();
+        renderHistory('mdp');
+        computeInsights('history');   // deja los avisos del estado con negocio en la caché
+        window.__filas.push({ d: '2026-09-30', t: '__CONFIG__', c: 'schema', s: '', a: 0, desc: sinNegocio, p: '', u: '' });
+        await fetchSync();            // mismos movimientos: solo cambió el esquema
+      }, b64(ESQUEMA_SOLO_HOGAR));
+      await page.waitForTimeout(300);
+    },
+    ver: (e, x) => [
+      [e.negocio === false, 'el negocio tiene que haberse apagado'],
+      [x.balance === x.balanceTotal, 'el balance en pantalla tiene que ser el total (' + x.balanceTotal + '), no el del negocio (muestra ' + x.balance + ')'],
+      [x.avisosCacheados === x.avisosFrescos, 'los avisos no pueden salir de la caché del estado anterior'],
+    ],
+    extra: (page) => page.evaluate(() => {
+      const total = TRANSACTIONS.reduce((s, t) => s + (t.t === 'Ingreso' ? 1 : t.t === 'Egreso' ? -1 : 0) * Number(t.a), 0);
+      return {
+        balance: document.getElementById('globBal').innerText,
+        balanceTotal: fmtMoney(total),
+        avisosCacheados: computeInsights('history').map(i => i.text).join(' | '),
+        avisosFrescos: _computeInsightsInner('history').map(i => i.text).join(' | '),
+      };
+    }),
+    porque: 'Con el filtro del negocio puesto y el negocio apagado, la pantalla mostraba importes de un filtro que ya no existe.',
+  },
+  {
     nombre: 'Restaurar defaults en instancia nueva → esquema de hogar, no el familiar',
     api: true, filas: 'vacia',
     accion: async (page) => {
@@ -153,22 +270,29 @@ const CASOS = [
   for (const caso of CASOS) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
-    await page.addInitScript(({ api, filas, cache }) => {
+    await page.addInitScript(({ api, filas, cache, lecturaFalla }) => {
       if (api) { localStorage.setItem('FINANZAS_API_URL', api); localStorage.setItem('FINANZAS_API_TOKEN', 'tok'); }
       if (cache) localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(cache));
       window.__filas = filas; window.__dejarSincronizar = !cache;   // con cache, la sync se libera a mano
+      window.__posts = [];
       window.fetch = async (u, o) => {
         if (/script\.google\.com/.test(String(u))) {
           if (o && o.method === 'POST') {
             const b = JSON.parse(o.body);
+            window.__posts.push(b);
+            // Lo que se envía queda en la planilla falsa: sin esto, un esquema
+            // subido por error no se vería en lo que leen los otros dispositivos.
+            if (b.action === 'addTransaction') window.__filas.push({ d: String(b.date).slice(0, 10), t: b.type,
+              c: b.category, s: b.subcategory, a: b.amount, desc: b.description, p: b.paymentMethod || '', u: b.uid });
             return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, written: 1, writtenUids: [b.uid], skipped: [] }) };
           }
+          if (lecturaFalla) throw new TypeError('Failed to fetch');
           while (!window.__dejarSincronizar) await new Promise(r => setTimeout(r, 50));
           return { ok: true, status: 200, json: async () => window.__filas, text: async () => JSON.stringify(window.__filas) };
         }
         return new Response('', { status: 200 });
       };
-    }, { api: caso.api ? API : null, filas: FILAS[caso.filas], cache: caso.cacheEsquema || null });
+    }, { api: caso.api ? API : null, filas: FILAS[caso.filas], cache: caso.cacheEsquema || null, lecturaFalla: !!caso.lecturaFalla });
     await page.goto(file, { waitUntil: 'load' });
     await page.waitForTimeout(600);
     let fallas = [];
