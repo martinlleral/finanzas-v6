@@ -1692,9 +1692,21 @@
             return false;
         }
 
+        /* La marca que submitFinal deja en los dos movimientos del par. Es
+         * persistente, así que clasifica la transferencia aunque el módulo
+         * esté oculto: ocultar el negocio es de pantalla, y no puede convertir
+         * plata que pasó del negocio a la casa en ingreso (o ahorro) del hogar.
+         * Las convenciones legacy sin marca siguen dependiendo del módulo. */
+        const MARCA_EXTRACCION = 'Extracción→Hogar';
+        function _tieneMarcaExtraccion(t) {
+            return t.s === 'Extracción' && String(t.desc || '').includes(MARCA_EXTRACCION);
+        }
+
         function isExtractionExp(t) {
             // Es egreso del negocio que representa retiro del dueño
-            if (!t || t.t !== 'Egreso' || !negocioActivo()) return false;
+            if (!t || t.t !== 'Egreso') return false;
+            if (_tieneMarcaExtraccion(t)) return true;
+            if (!negocioActivo()) return false;
             if (!(t.c === BIZ_NAME || t.c === 'Mar de Pan' || t.c === 'MarDePan')) return false;
             if (t.s === 'Extracción') return true;
             // Legacy: sueldos con descripción "Sueldo Transición" anclada + umbral
@@ -1706,7 +1718,9 @@
 
         function isExtractionInc(t) {
             // Es ingreso del hogar que representa retiro del negocio (otro lado del par)
-            if (!t || t.t !== 'Ingreso' || !negocioActivo()) return false;
+            if (!t || t.t !== 'Ingreso') return false;
+            if (_tieneMarcaExtraccion(t)) return true;
+            if (!negocioActivo()) return false;
             if (t.c === 'Hogar' && (t.s === 'Extracción' || t.s === 'Panadería')) return true;
             return false;
         }
@@ -1918,6 +1932,11 @@
         function closeModal() { closeModalA11y(document.getElementById('catModal')); }
         function confirmTx(sub) {
             currentTx.subcategory = sub; closeModal();
+            // Si es una extracción se decide ACÁ, con lo que el usuario está
+            // viendo: si una sincronización cambia esquema o alias con la
+            // confirmación abierta, el par no puede perderse al confirmar.
+            currentTx.esExtraccion = currentTx.type === 'Egreso' && sub === 'Extracción'
+                && esCategoriaNegocio(currentTx.category);
             document.getElementById('homeView').classList.remove('active');
             document.getElementById('confirmView').classList.add('active');
             document.getElementById('prevAmount').innerText = `$${currentTx.amount.toLocaleString()}`;
@@ -2013,18 +2032,14 @@
             // - Egreso del negocio (tx original)
             // - Ingreso del Hogar con subcategoría "Extracción"
             // Marcamos ambas filas con un tag en desc para trazabilidad.
-            // Se decide por la categoría elegida, no por negocioActivo(): si el
+            // Se decidió al abrir la confirmación (confirmTx), no ahora: si el
             // esquema cambió con la confirmación abierta, el par se perdía y la
             // extracción quedaba como un egreso simple.
-            const isExtraction = (
-                currentTx.type === 'Egreso' &&
-                currentTx.subcategory === 'Extracción' &&
-                esCategoriaNegocio(currentTx.category)
-            );
+            const isExtraction = currentTx.esExtraccion === true;
 
             const txsToCommit = [newTx];
             if (isExtraction) {
-                const pairTag = 'Extracción→Hogar';
+                const pairTag = MARCA_EXTRACCION;
                 newTx.desc = (newTx.desc ? newTx.desc + ' · ' : '') + pairTag;
                 txsToCommit.push({
                     _uid: _makeTxUid(),
@@ -2427,12 +2442,17 @@
         // Marker para distinguir filas de configuración de transacciones reales
         const CONFIG_MARKER = '__CONFIG__';
         let _avisoConfigDado = false;   // el aviso de config dañada va 1 vez por sesión
-        // ¿Esta sesión ya leyó la planilla? Hasta que lo haga, el esquema que
-        // hay en memoria puede ser el genérico (un dispositivo sin caché cuya
-        // primera lectura falló), y guardarlo pisaría el de la casa: en la
-        // instancia familiar apagaría el negocio en todos los dispositivos.
-        // Una planilla vacía cuenta como leída: una instancia nueva guarda igual.
-        let _planillaLeida = false;
+        // ¿El esquema en memoria es el de esta instancia? Lo es si vino de la
+        // planilla o del caché (que solo escriben una lectura o un guardado).
+        // No lo es el genérico de arranque de un dispositivo sin caché cuya
+        // primera lectura falló o trajo la config ilegible: guardarlo pisaría
+        // el de la casa y, en la instancia familiar, apagaría el negocio en
+        // todos los dispositivos. Una planilla sin config también confirma:
+        // una instancia nueva guarda igual.
+        let _esquemaConfirmado = !IS_DEMO && !!localStorage.getItem('FINANZAS_SCHEMA');
+        // Si la instancia tiene el negocio según lo confirmado, no según el
+        // borrador que se está editando en ⚙️. Lo usa «Restaurar defaults».
+        let _negocioConfirmado = _esquemaConfirmado && negocioActivo();
 
         // Extrae filas de config del raw, aplica la más reciente y devuelve las transacciones limpias
         function extractConfig(raw) {
@@ -2462,9 +2482,10 @@
             // y con un sort estable el empate conservaba el orden del sheet →
             // ganaba la config MÁS VIEJA del día.
             configRows.sort((a, b) => String(a.d || '').localeCompare(String(b.d || '')));
-            const latest = { schema: null, aliases: null };
+            const latest = { aliases: null };
+            const schemaRows = [];
             for (const r of configRows) {
-                if (r.c === 'schema') latest.schema = r;
+                if (r.c === 'schema') schemaRows.push(r);
                 if (r.c === 'aliases') latest.aliases = r;
             }
 
@@ -2472,22 +2493,26 @@
             // en el sheet hasta que alguien guarde una nueva, así que avisar en
             // cada fetchSync sería un toast permanente e inútil que además tapa
             // los mensajes que sí importan.
-            if (latest.schema) {
+            if (schemaRows.length === 0) _esquemaConfirmado = true;   // planilla sin config
+            for (let i = schemaRows.length - 1; i >= 0; i--) {
                 try {
-                    SCHEMA = JSON.parse(b64ToJson(latest.schema.desc || ''));
+                    SCHEMA = JSON.parse(b64ToJson(schemaRows[i].desc || ''));
                     localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
-                    aplicarModulos();
+                    _esquemaConfirmado = true;
+                    break;
                 } catch (e) {
                     console.warn('Config schema corrupta:', e);
                     // NO silencioso: esta falla dejó las categorías sin sincronizar
                     // entre dispositivos durante 7 semanas sin que nadie se enterara.
-                    // OJO: no se pisa el SCHEMA local — se conserva el que ya
-                    // había, que es mejor que volver al default.
-                    if (!_avisoConfigDado) {
+                    if (i === schemaRows.length - 1 && !_avisoConfigDado) {
                         _avisoConfigDado = true;
                         _toastSync('⚠️ Las categorías del servidor están dañadas. '
                                  + 'Guardá tus categorías desde ⚙️ para repararlas.');
                     }
+                    // Con un esquema confirmado, se conserva el local: es mejor
+                    // que volver a uno viejo. Sin él (dispositivo nuevo), sirve
+                    // la fila legible anterior: el genérico no es de esta casa.
+                    if (_esquemaConfirmado) break;
                 }
             }
             if (latest.aliases) {
@@ -2498,6 +2523,10 @@
                     console.warn('Config aliases corrupta:', e);
                 }
             }
+            // Recién acá, con esquema Y alias cargados: un negocio renombrado
+            // se reconoce por su alias, y decidir antes lo dejaba escondido.
+            if (_esquemaConfirmado) _negocioConfirmado = negocioActivo();
+            aplicarModulos();
             return txs;
         }
 
@@ -2583,7 +2612,6 @@
 
                 // Extraer configuración y separar transacciones reales
                 const cleanTxs = extractConfig(raw);
-                _planillaLeida = true;
 
                 // ¿Qué transacciones ya aterrizaron en el sheet?
                 const sigOf = (t) => `${t.d}|${t.t}|${t.c}|${t.s}|${t.a}|${t.desc}`;
@@ -4209,12 +4237,15 @@
         }
 
         async function saveConfig() {
-            if (API_URL && !_planillaLeida) {
+            if (API_URL && !_esquemaConfirmado) {
                 // No se reintenta la lectura acá: traería el esquema de la
-                // planilla y borraría lo que se acaba de editar sin avisar.
-                await uiAlert(
-                    'Todavía no pude leer la planilla, y guardar ahora podría pisar las categorías '
-                    + 'de los otros dispositivos. Cuando haya conexión tocá 🔄 y volvé a guardar.',
+                // planilla y reemplazaría lo editado. Lo que se pierde así son
+                // ediciones sobre el genérico, que es justo lo que no debe subir.
+                await uiAlert(_avisoConfigDado
+                    ? 'Las categorías de la planilla están dañadas y este dispositivo no tiene una copia. '
+                      + 'Guardalas desde un dispositivo que ya las tenga.'
+                    : 'Todavía no pude leer la planilla, y guardar ahora podría pisar las categorías '
+                      + 'de los otros dispositivos. Cuando haya conexión tocá 🔄 y volvé a guardar.',
                     'Primero hay que sincronizar');
                 return;
             }
@@ -4222,6 +4253,7 @@
             try {
                 const r1 = await saveConfigToSheet('schema', SCHEMA);
                 const r2 = await saveConfigToSheet('aliases', ALIASES);
+                _negocioConfirmado = negocioActivo();   // lo guardado pasa a ser lo confirmado
                 // Re-procesar con nuevas categorías/aliases
                 processHistory();
                 aplicarModulos();
@@ -4258,8 +4290,10 @@
             // En la instancia con negocio, "defaults" es su esquema; en una de
             // hogar, el genérico. Si acá se usara SCHEMA_DEFAULT a secas, restaurar
             // en la instancia familiar apagaría el negocio y lo subiría al sheet.
+            // Se decide por lo confirmado, no por el borrador: si se borró el
+            // negocio sin guardar, restaurar tiene que traerlo de vuelta.
             SCHEMA = JSON.parse(JSON.stringify(IS_DEMO ? SCHEMA_DEMO
-                                               : (negocioActivo() ? SCHEMA_PERSONAL : SCHEMA_HOGAR)));
+                                               : (_negocioConfirmado ? SCHEMA_PERSONAL : SCHEMA_HOGAR)));
             ALIASES = {...ALIASES_DEFAULT};
             aplicarModulos();
             renderConfig();
