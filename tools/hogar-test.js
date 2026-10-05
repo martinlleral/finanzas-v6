@@ -12,9 +12,11 @@
  *
  * Contra el cliente v7.7 pasa 1 de 8. El primer caso falla por lo que importa:
  * una instancia nueva veía el negocio y las categorías de la instancia familiar.
- * Contra la v7.8 original (879cb39) pasa 11 de 26; contra la primera tanda
- * de arreglos (ef13cc9), 16 de 26; contra la segunda (4643b54), 21 de 26:
- * fallan justo los casos que prueban cada arreglo de su revisión.
+ * Contra la v7.8 original (879cb39) pasa 13 de 30; contra las tandas de
+ * arreglos ef13cc9, 4643b54 y 10fc6c1, 16, 23 y 26 de 30: fallan justo los
+ * casos que prueban cada arreglo de su revisión. (El de «config guardada para
+ * OTRA planilla, formato nuevo» pasa en las anteriores porque no conocen el
+ * formato: protege el nuevo, no reproduce un bug viejo.)
  */
 const { chromium } = require('/opt/homebrew/lib/node_modules/playwright');
 const path = require('path');
@@ -70,6 +72,12 @@ const FILAS = {
     { d: ANIO + '-01-11', t: 'Egreso', c: 'HogarYVida', s: 'Familia', a: 50000, desc: 'x', p: '', u: 'e3' },
   ],
 };
+
+// Lo que leería otro dispositivo: las filas nuevas de la planilla falsa.
+const MOVIMIENTOS_EN_LA_PLANILLA = () => ({
+  movimientos: window.__filas.filter(r => r.t !== '__CONFIG__' && /^tx_/.test(r.u || ''))
+    .map(r => ({ type: r.t, category: r.c, subcategory: r.s, amount: r.a, uid: r.u, description: r.desc })),
+});
 
 // El par de una extracción: un egreso del negocio y un ingreso al hogar, por
 // el mismo importe, con uid distintos y los dos marcados. Contar movimientos
@@ -228,10 +236,7 @@ const CASOS = [
       await page.waitForTimeout(1000);
     },
     ver: (e, x) => PAR_COMPLETO(x.movimientos),
-    extra: (page) => page.evaluate(() => ({
-      movimientos: window.__posts.filter(b => b.type !== '__CONFIG__')
-        .flatMap(b => b.action === 'addTransactions' ? b.txs : [b]),
-    })),
+    extra: (page) => page.evaluate(MOVIMIENTOS_EN_LA_PLANILLA),
     porque: 'Una extracción guardada como egreso simple saca plata del negocio que nunca entra a la casa: el balance del hogar queda mal sin que nadie lo vea.',
   },
   {
@@ -375,10 +380,7 @@ const CASOS = [
       await page.waitForTimeout(1000);
     },
     ver: (e, x) => PAR_COMPLETO(x.movimientos),
-    extra: (page) => page.evaluate(() => ({
-      movimientos: window.__posts.filter(b => b.type !== '__CONFIG__')
-        .flatMap(b => b.action === 'addTransactions' ? b.txs : [b]),
-    })),
+    extra: (page) => page.evaluate(MOVIMIENTOS_EN_LA_PLANILLA),
     porque: 'Lo que el usuario eligió al abrir la confirmación no puede cambiar de significado por una sincronización.',
   },
   {
@@ -413,14 +415,79 @@ const CASOS = [
     porque: 'El mismo navegador usado con dos planillas: las categorías de la de hogar no son de la familiar, y subirlas apagaba el negocio.',
   },
   {
-    nombre: 'Categorías guardadas sin saber de qué planilla (anteriores a esta versión) → no cuentan como confirmadas',
-    api: true, filas: 'familiar', lecturaFalla: true, cacheEsquema: ESQUEMA_SOLO_HOGAR, liberarSync: true,
+    nombre: 'Teléfono de la familia con la copia de antes (sin planilla anotada) y la planilla con el esquema dañado → puede repararla',
+    api: true, filas: 'soloCorrupta', cacheEsquema: ESQUEMA_FAMILIAR,
     accion: async (page) => {
       await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
     },
-    ver: (e, x) => [[x.envios === 0, 'no puede salir ningún envío de config (salieron ' + x.envios + ')']],
-    extra: (page) => page.evaluate(() => ({ envios: window.__posts.filter(b => b.type === '__CONFIG__').length })),
-    porque: 'Una copia sin procedencia puede ser de cualquier planilla: se confirma con la primera lectura buena.',
+    ver: (e, x) => [[x.conNegocio >= 1, 'tiene que subir su copia, que trae el negocio (subió ' + x.conNegocio + ')']],
+    extra: (page) => page.evaluate(() => ({
+      conNegocio: window.__posts.filter(b => b.type === '__CONFIG__' && b.category === 'schema'
+        && /Mar de Pan/.test(new TextDecoder().decode(Uint8Array.from(atob(b.description), c => c.charCodeAt(0))))).length,
+    })),
+    porque: 'La copia anterior se asigna a la planilla conectada hoy: si no, ningún dispositivo de la casa podría reparar una config dañada.',
+  },
+  {
+    nombre: 'Navegador con la copia de OTRA planilla abre una planilla nueva (vacía) y guarda → no le sube las categorías ajenas',
+    api: true, filas: 'vacia', cacheEsquema: ESQUEMA_FAMILIAR, cacheOrigen: 'https://script.google.com/macros/s/AKfycbxOTRA/exec',
+    accion: async (page) => {
+      await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
+    },
+    ver: (e, x) => [
+      [e.negocio === false, 'la planilla nueva arranca sin negocio'],
+      [x.ajenas === 0, 'no puede subir el esquema de la otra planilla (subió ' + x.ajenas + ')'],
+    ],
+    extra: (page) => page.evaluate(() => ({
+      ajenas: window.__posts.filter(b => b.type === '__CONFIG__' && b.category === 'schema'
+        && /Mar de Pan/.test(new TextDecoder().decode(Uint8Array.from(atob(b.description), c => c.charCodeAt(0))))).length,
+    })),
+    porque: 'Configurar la planilla de otra casa en el teléfono propio le subía el árbol de categorías de la familia.',
+  },
+  {
+    nombre: 'Config ya guardada para OTRA planilla (formato nuevo) → una planilla vacía arranca con la genérica',
+    api: true, filas: 'vacia', cfgPlanilla: { url: 'https://script.google.com/macros/s/AKfycbxOTRA/exec', schema: ESQUEMA_FAMILIAR },
+    ver: (e) => [[e.negocio === false && !e.categorias.includes('Mar de Pan'), 'las categorías de otra planilla no pueden aparecer acá']],
+    porque: 'Cada planilla tiene su propio juego de categorías en el navegador.',
+  },
+  {
+    nombre: 'Se recupera el esquema renombrado y una SEGUNDA sincronización encuentra el dañado → el negocio sigue',
+    api: true, filas: 'renombradaYCorrupta',
+    accion: async (page) => {
+      await page.evaluate(async () => {
+        window.uiConfirm = async () => true;
+        await fetchSync();
+        window.__negocioTrasSegunda = negocioActivo();
+        await restoreDefaults();
+      });
+    },
+    ver: (e, x) => [
+      [x.negocioTrasSegunda === true, 'después de la segunda sincronización el negocio tiene que seguir'],
+      [e.negocio === true, '«Restaurar» tiene que conservar el negocio'],
+    ],
+    extra: (page) => page.evaluate(() => ({ negocioTrasSegunda: window.__negocioTrasSegunda })),
+    porque: 'Rechazar el esquema remoto y aplicar sus alias armaba una config que nunca existió: el negocio desaparecía y Restaurar subía el de hogar.',
+  },
+  {
+    nombre: 'Editar la subcategoría de una extracción y ocultar el negocio → sigue sin contarse como ahorro',
+    api: true, filas: 'conExtraccion',
+    accion: async (page) => {
+      await page.evaluate(async (sinNegocio) => {
+        await updateTxFromSheet(TRANSACTIONS.find(t => t.u === 'e2'), { s: 'Panadería' });
+        await new Promise(r => setTimeout(r, 1500));
+        window.__filas.push({ d: '2026-09-30', t: '__CONFIG__', c: 'schema', s: '', a: 0, desc: sinNegocio, p: '', u: '' });
+        await fetchSync();
+      }, b64(ESQUEMA_SOLO_HOGAR));
+    },
+    ver: (e, x) => [
+      [x.sub === 'Panadería', 'la edición tiene que aplicarse (quedó: ' + x.sub + ')'],
+      [x.ingresoEsExtraccion, 'el ingreso tiene que seguir siendo una transferencia'],
+      [!/ahorrado/.test(x.avisos), 'no puede aparecer ahorro (avisos: ' + x.avisos + ')'],
+    ],
+    extra: (page) => page.evaluate(() => {
+      const t = TRANSACTIONS.find(t => t.u === 'e2');
+      return { sub: t.s, ingresoEsExtraccion: isExtractionInc(t), avisos: computeInsights('history').map(i => i.text).join(' | ') };
+    }),
+    porque: 'La marca dice de dónde vino la plata; la subcategoría se puede editar y no lo cambia.',
   },
   {
     nombre: 'Se recupera un esquema renombrado viejo → con los alias de su época, no los posteriores',
@@ -496,7 +563,8 @@ const CASOS = [
   for (const caso of CASOS) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
-    await page.addInitScript(({ api, filas, cache, origen, lecturaFalla, liberar }) => {
+    await page.addInitScript(({ api, filas, cache, origen, cfg, lecturaFalla, liberar }) => {
+      if (cfg) localStorage.setItem('FINANZAS_CFG::' + cfg.url, JSON.stringify({ schema: cfg.schema, aliases: cfg.aliases || {} }));
       if (api) { localStorage.setItem('FINANZAS_API_URL', api); localStorage.setItem('FINANZAS_API_TOKEN', 'tok'); }
       if (cache) localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(cache));
       if (origen) localStorage.setItem('FINANZAS_SCHEMA_ORIGEN', origen);
@@ -511,6 +579,8 @@ const CASOS = [
             // subido por error no se vería en lo que leen los otros dispositivos.
             if (b.action === 'addTransaction') window.__filas.push({ d: String(b.date).slice(0, 10), t: b.type,
               c: b.category, s: b.subcategory, a: b.amount, desc: b.description, p: b.paymentMethod || '', u: b.uid });
+            if (b.action === 'addTransactions') (b.txs || []).forEach(x => window.__filas.push({ d: String(x.date).slice(0, 10),
+              t: x.type, c: x.category, s: x.subcategory, a: x.amount, desc: x.description, p: x.paymentMethod || '', u: x.uid }));
             if (b.action === 'updateTransaction') {
               const f = window.__filas.find(r => r.u && r.u === b.uid);
               if (f) Object.assign(f, b.changes);
@@ -524,7 +594,9 @@ const CASOS = [
         return new Response('', { status: 200 });
       };
     }, { api: caso.api ? API : null, filas: FILAS[caso.filas], cache: caso.cacheEsquema || null,
-      origen: caso.cacheOrigen === 'misma' ? API : (caso.cacheOrigen || null), lecturaFalla: !!caso.lecturaFalla, liberar: !!caso.liberarSync });
+      origen: caso.cacheOrigen === 'misma' ? API : (caso.cacheOrigen || null),
+      cfg: caso.cfgPlanilla ? Object.assign({}, caso.cfgPlanilla, { url: caso.cfgPlanilla.url === 'misma' ? API : caso.cfgPlanilla.url }) : null,
+      lecturaFalla: !!caso.lecturaFalla, liberar: !!caso.liberarSync });
     await page.goto(file, { waitUntil: 'load' });
     await page.waitForTimeout(600);
     let fallas = [];

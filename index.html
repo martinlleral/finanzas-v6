@@ -1384,16 +1384,54 @@
             return s;
         }
 
-        // Carga el schema y aliases.
-        // - En modo demo, SIEMPRE uso el schema anónimo (ignoro cache para
-        //   que visitantes viejos no vean datos personales residuales).
-        // - En modo real, priorizo el cache del usuario y caigo al default personal.
-        let SCHEMA = IS_DEMO
-            ? JSON.parse(JSON.stringify(SCHEMA_DEFAULT))
-            : (JSON.parse(localStorage.getItem('FINANZAS_SCHEMA')) || JSON.parse(JSON.stringify(SCHEMA_DEFAULT)));
-        let ALIASES = IS_DEMO
-            ? {...ALIASES_DEFAULT}
-            : (JSON.parse(localStorage.getItem('FINANZAS_ALIASES')) || {...ALIASES_DEFAULT});
+        /* Esquema y alias, guardados POR PLANILLA y como una unidad.
+         *
+         * El navegador guardaba un solo juego de categorías y alias, conectado
+         * a la planilla que fuera. El mismo navegador puede usar dos (un QR de
+         * otra casa, una instancia de prueba): las categorías de una terminaban
+         * subidas a la otra, y esquema y alias de épocas distintas se mezclaban.
+         * Ahora la clave lleva la dirección del servidor y guarda los dos juntos.
+         *
+         * Migración: el caché anterior (FINANZAS_SCHEMA / FINANZAS_ALIASES, sin
+         * planilla) se asigna a la planilla conectada HOY y se borra. Supone que
+         * es de esa planilla: los dispositivos de la familia nunca usaron otra.
+         * Si la versión intermedia anotó otro origen, no se migra. Sin migrar,
+         * un dispositivo de la familia no podría reparar una config dañada.
+         *
+         * En modo demo, SIEMPRE el esquema anónimo (ignora todo caché, para que
+         * un visitante viejo no vea datos personales residuales). */
+        const CONFIG_KEY = 'FINANZAS_CFG::' + API_URL;
+        function _leerConfigLocal() {
+            if (IS_DEMO) return null;
+            try {
+                const cfg = JSON.parse(localStorage.getItem(CONFIG_KEY) || 'null');
+                if (cfg && cfg.schema) return cfg;
+                const viejo = JSON.parse(localStorage.getItem('FINANZAS_SCHEMA') || 'null');
+                const origen = localStorage.getItem('FINANZAS_SCHEMA_ORIGEN');
+                if (!viejo || (origen && origen !== API_URL)) return null;
+                const migrada = { schema: viejo,
+                    aliases: JSON.parse(localStorage.getItem('FINANZAS_ALIASES') || 'null') || {...ALIASES_DEFAULT} };
+                localStorage.setItem(CONFIG_KEY, JSON.stringify(migrada));
+                ['FINANZAS_SCHEMA', 'FINANZAS_ALIASES', 'FINANZAS_SCHEMA_ORIGEN'].forEach(k => localStorage.removeItem(k));
+                return migrada;
+            } catch (e) { return null; }
+        }
+        function _guardarConfigLocal() {
+            if (IS_DEMO) return;
+            localStorage.setItem(CONFIG_KEY, JSON.stringify({ schema: SCHEMA, aliases: ALIASES }));
+        }
+        const _configLocal = _leerConfigLocal();
+        let SCHEMA = _configLocal ? _configLocal.schema : JSON.parse(JSON.stringify(SCHEMA_DEFAULT));
+        let ALIASES = _configLocal ? (_configLocal.aliases || {...ALIASES_DEFAULT}) : {...ALIASES_DEFAULT};
+        // ¿El esquema en memoria es el de esta planilla? Lo es si vino de ella o
+        // de su caché (que solo escriben una lectura o un guardado). No lo es el
+        // genérico de arranque de un dispositivo sin caché de esta planilla cuya
+        // primera lectura falló o trajo la config ilegible: guardarlo pisaría el
+        // de la casa y, en la instancia familiar, apagaría el negocio en todos
+        // los dispositivos. Una planilla sin config también confirma: una
+        // instancia nueva guarda igual (y arranca con el genérico, no con el
+        // de otra planilla que haya usado este navegador).
+        let _esquemaConfirmado = !!_configLocal;
 
         /* ─── Módulos ─────────────────────────────────────────────────────────
          *
@@ -1698,8 +1736,10 @@
          * plata que pasó del negocio a la casa en ingreso (o ahorro) del hogar.
          * Las convenciones legacy sin marca siguen dependiendo del módulo. */
         const MARCA_EXTRACCION = 'Extracción→Hogar';
+        // Solo la marca: la subcategoría se puede editar, y cambiarla no
+        // cambia de dónde vino la plata.
         function _tieneMarcaExtraccion(t) {
-            return t.s === 'Extracción' && String(t.desc || '').includes(MARCA_EXTRACCION);
+            return String(t.desc || '').includes(MARCA_EXTRACCION);
         }
 
         function isExtractionExp(t) {
@@ -2442,25 +2482,6 @@
         // Marker para distinguir filas de configuración de transacciones reales
         const CONFIG_MARKER = '__CONFIG__';
         let _avisoConfigDado = false;   // el aviso de config dañada va 1 vez por sesión
-        // ¿El esquema en memoria es el de esta instancia? Lo es si vino de la
-        // planilla o del caché (que solo escriben una lectura o un guardado).
-        // No lo es el genérico de arranque de un dispositivo sin caché cuya
-        // primera lectura falló o trajo la config ilegible: guardarlo pisaría
-        // el de la casa y, en la instancia familiar, apagaría el negocio en
-        // todos los dispositivos. Una planilla sin config también confirma:
-        // una instancia nueva guarda igual.
-        // El caché cuenta solo si es de ESTA planilla: el mismo navegador puede
-        // haber usado otra (un QR, una instancia de prueba), y sus categorías no
-        // son las de esta casa. Un caché sin procedencia (anterior a guardarla)
-        // tampoco cuenta: se confirma con la primera lectura buena.
-        const SCHEMA_ORIGEN_KEY = 'FINANZAS_SCHEMA_ORIGEN';
-        function _guardarEsquemaLocal() {
-            localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
-            localStorage.setItem(SCHEMA_ORIGEN_KEY, API_URL);
-        }
-        let _esquemaConfirmado = !IS_DEMO && !!API_URL
-            && !!localStorage.getItem('FINANZAS_SCHEMA')
-            && localStorage.getItem(SCHEMA_ORIGEN_KEY) === API_URL;
         // Si la instancia tiene el negocio según lo confirmado, no según el
         // borrador que se está editando en ⚙️. Lo usa «Restaurar defaults».
         let _negocioConfirmado = _esquemaConfirmado && negocioActivo();
@@ -2506,7 +2527,11 @@
                 const hasta = i + 1 < schemaRows.length ? schemaRows[i + 1].pos : Infinity;
                 return aliasRows.filter(a => a.pos < hasta).map(a => a.r).pop() || null;
             };
-            const latest = { aliases: aliasRows.length ? aliasRows[aliasRows.length - 1].r : null };
+            // Los alias viajan con su esquema: si el esquema remoto se rechaza,
+            // se conservan los locales (aplicar los remotos armaba un par que
+            // nunca existió y el negocio renombrado desaparecía).
+            const latest = { aliases: (schemaRows.length === 0 && aliasRows.length)
+                ? aliasRows[aliasRows.length - 1].r : null };
             let configAceptada = schemaRows.length === 0;   // planilla sin config
 
             // El aviso va UNA vez por sesión. La fila de config rota queda rota
@@ -2516,7 +2541,6 @@
             for (let i = schemaRows.length - 1; i >= 0; i--) {
                 try {
                     SCHEMA = JSON.parse(b64ToJson(schemaRows[i].r.desc || ''));
-                    _guardarEsquemaLocal();
                     configAceptada = true;
                     // Un esquema recuperado va con SUS alias: un esquema viejo
                     // con alias nuevos es una combinación que nunca existió.
@@ -2540,7 +2564,6 @@
             if (latest.aliases) {
                 try {
                     ALIASES = JSON.parse(b64ToJson(latest.aliases.desc || ''));
-                    localStorage.setItem('FINANZAS_ALIASES', JSON.stringify(ALIASES));
                 } catch (e) {
                     console.warn('Config aliases corrupta:', e);
                 }
@@ -2550,6 +2573,7 @@
             // Lo confirmado sale SOLO de una config aceptada: con el esquema
             // ilegible, SCHEMA puede ser el borrador de ⚙️, y no lo es.
             if (configAceptada) {
+                _guardarConfigLocal();
                 _esquemaConfirmado = true;
                 _negocioConfirmado = negocioActivo();
             }
@@ -2585,7 +2609,6 @@
 
         // Guarda una config (schema o aliases) como fila especial en el sheet
         async function saveConfigToSheet(kind, data) {
-            const lsKey = kind === 'schema' ? 'FINANZAS_SCHEMA' : 'FINANZAS_ALIASES';
             if (!API_URL) {
                 // Modo demo (portafolio público): NO se persiste. Si se guardara
                 // en la misma clave que usa el modo real, el día que alguien
@@ -2605,8 +2628,7 @@
                 amount: 0,
                 description: jsonToB64(data)
             });
-            if (kind === 'schema') _guardarEsquemaLocal();
-            else localStorage.setItem(lsKey, JSON.stringify(data));
+            _guardarConfigLocal();
             if (r.status !== 'ok') {
                 _toastSync('⚠️ La config quedó guardada en este dispositivo pero no se subió');
             }
