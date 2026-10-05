@@ -12,9 +12,9 @@
  *
  * Contra el cliente v7.7 pasa 1 de 8. El primer caso falla por lo que importa:
  * una instancia nueva veía el negocio y las categorías de la instancia familiar.
- * Contra la v7.8 original (879cb39) pasa 13 de 30; contra las tandas de
- * arreglos ef13cc9, 4643b54 y 10fc6c1, 16, 23 y 26 de 30: fallan justo los
- * casos que prueban cada arreglo de su revisión. (El de «config guardada para
+ * Contra la v7.8 original (879cb39) pasa 13 de 32 (con los casos actuales);
+ * contra 4ada9d0, la tanda anterior, 30 de 32: fallan justo los casos que
+ * prueban cada arreglo de su revisión. (El de «config guardada para
  * OTRA planilla, formato nuevo» pasa en las anteriores porque no conocen el
  * formato: protege el nuevo, no reproduce un bug viejo.)
  */
@@ -72,6 +72,15 @@ const FILAS = {
     { d: ANIO + '-01-11', t: 'Egreso', c: 'HogarYVida', s: 'Familia', a: 50000, desc: 'x', p: '', u: 'e3' },
   ],
 };
+
+// Una planilla nueva y vacía abierta desde un navegador que usó otra: leyó,
+// guardó, y lo que guardó es el esquema genérico.
+const VER_PLANILLA_NUEVA = (e, x) => [
+  [x.lecturas >= 1, 'la lectura de la planilla vacía tiene que haberse completado'],
+  [e.negocio === false, 'la planilla nueva arranca sin negocio'],
+  [x.esquemas >= 1, 'guardar tiene que subir el esquema (subió ' + x.esquemas + ')'],
+  [x.ajenas === 0, 'no puede subir el esquema de la otra planilla (subió ' + x.ajenas + ')'],
+];
 
 // Lo que leería otro dispositivo: las filas nuevas de la planilla falsa.
 const MOVIMIENTOS_EN_LA_PLANILLA = () => ({
@@ -416,12 +425,16 @@ const CASOS = [
   },
   {
     nombre: 'Teléfono de la familia con la copia de antes (sin planilla anotada) y la planilla con el esquema dañado → puede repararla',
-    api: true, filas: 'soloCorrupta', cacheEsquema: ESQUEMA_FAMILIAR,
+    api: true, filas: 'soloCorrupta', cacheEsquema: ESQUEMA_FAMILIAR, liberarSync: true,
     accion: async (page) => {
       await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
     },
-    ver: (e, x) => [[x.conNegocio >= 1, 'tiene que subir su copia, que trae el negocio (subió ' + x.conNegocio + ')']],
+    ver: (e, x) => [
+      [x.lecturas >= 1, 'la lectura de la planilla (dañada) tiene que haberse completado'],
+      [x.conNegocio >= 1, 'tiene que subir su copia, que trae el negocio (subió ' + x.conNegocio + ')'],
+    ],
     extra: (page) => page.evaluate(() => ({
+      lecturas: window.__lecturas || 0,
       conNegocio: window.__posts.filter(b => b.type === '__CONFIG__' && b.category === 'schema'
         && /Mar de Pan/.test(new TextDecoder().decode(Uint8Array.from(atob(b.description), c => c.charCodeAt(0))))).length,
     })),
@@ -429,19 +442,50 @@ const CASOS = [
   },
   {
     nombre: 'Navegador con la copia de OTRA planilla abre una planilla nueva (vacía) y guarda → no le sube las categorías ajenas',
-    api: true, filas: 'vacia', cacheEsquema: ESQUEMA_FAMILIAR, cacheOrigen: 'https://script.google.com/macros/s/AKfycbxOTRA/exec',
+    api: true, filas: 'vacia', cacheEsquema: ESQUEMA_FAMILIAR, cacheOrigen: 'https://script.google.com/macros/s/AKfycbxOTRA/exec', liberarSync: true,
     accion: async (page) => {
       await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
     },
-    ver: (e, x) => [
-      [e.negocio === false, 'la planilla nueva arranca sin negocio'],
-      [x.ajenas === 0, 'no puede subir el esquema de la otra planilla (subió ' + x.ajenas + ')'],
-    ],
+    ver: (e, x) => VER_PLANILLA_NUEVA(e, x),
     extra: (page) => page.evaluate(() => ({
+      lecturas: window.__lecturas || 0,
+      esquemas: window.__posts.filter(b => b.type === '__CONFIG__' && b.category === 'schema').length,
       ajenas: window.__posts.filter(b => b.type === '__CONFIG__' && b.category === 'schema'
         && /Mar de Pan/.test(new TextDecoder().decode(Uint8Array.from(atob(b.description), c => c.charCodeAt(0))))).length,
     })),
     porque: 'Configurar la planilla de otra casa en el teléfono propio le subía el árbol de categorías de la familia.',
+  },
+  {
+    nombre: 'Primera apertura con esta versión desde el QR de OTRA casa, con la copia vieja de la familia → no se la asigna a la nueva',
+    api: true, filas: 'vacia', cacheEsquema: ESQUEMA_FAMILIAR, qrDesde: 'https://script.google.com/macros/s/AKfycbxOTRA/exec', liberarSync: true,
+    accion: async (page) => {
+      await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
+    },
+    ver: (e, x) => VER_PLANILLA_NUEVA(e, x).concat([[x.apiActual === x.apiQr, 'el QR tiene que haber cambiado la planilla']]),
+    extra: (page) => page.evaluate((qr) => ({
+      apiActual: API_URL, apiQr: qr,
+      lecturas: window.__lecturas || 0,
+      esquemas: window.__posts.filter(b => b.type === '__CONFIG__' && b.category === 'schema').length,
+      ajenas: window.__posts.filter(b => b.type === '__CONFIG__' && b.category === 'schema'
+        && /Mar de Pan/.test(new TextDecoder().decode(Uint8Array.from(atob(b.description), c => c.charCodeAt(0))))).length,
+    }), API),
+    porque: 'El QR cambia la planilla antes de que arranque la migración: sin anotar de dónde era la copia, la familia le regalaba su árbol de categorías a otra casa.',
+  },
+  {
+    nombre: 'Extracción con una descripción de 600 caracteres → la marca sobrevive al corte del servidor',
+    api: true, filas: 'familiar',
+    accion: async (page) => {
+      await page.evaluate(async () => {
+        currentTx = { type: 'Egreso', category: 'Mar de Pan', subcategory: '', amount: 1000, desc: '', paymentMethod: '' };
+        confirmTx('Extracción');
+        document.getElementById('descInput').value = 'x'.repeat(600);
+        submitFinal();
+      });
+      await page.waitForTimeout(1000);
+    },
+    ver: (e, x) => PAR_COMPLETO(x.movimientos),
+    extra: (page) => page.evaluate(MOVIMIENTOS_EN_LA_PLANILLA),
+    porque: 'El servidor corta en 500 y la marca iba al final: con un texto largo, la extracción quedaba sin marca y, con el módulo oculto, como ahorro.',
   },
   {
     nombre: 'Config ya guardada para OTRA planilla (formato nuevo) → una planilla vacía arranca con la genérica',
@@ -563,9 +607,9 @@ const CASOS = [
   for (const caso of CASOS) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
-    await page.addInitScript(({ api, filas, cache, origen, cfg, lecturaFalla, liberar }) => {
+    await page.addInitScript(({ api, filas, cache, origen, cfg, lecturaFalla, liberar, qrDesde }) => {
       if (cfg) localStorage.setItem('FINANZAS_CFG::' + cfg.url, JSON.stringify({ schema: cfg.schema, aliases: cfg.aliases || {} }));
-      if (api) { localStorage.setItem('FINANZAS_API_URL', api); localStorage.setItem('FINANZAS_API_TOKEN', 'tok'); }
+      if (api) { localStorage.setItem('FINANZAS_API_URL', qrDesde || api); localStorage.setItem('FINANZAS_API_TOKEN', 'tok'); }
       if (cache) localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(cache));
       if (origen) localStorage.setItem('FINANZAS_SCHEMA_ORIGEN', origen);
       window.__filas = filas; window.__dejarSincronizar = !cache || liberar;   // con cache, la sync se libera a mano
@@ -577,10 +621,13 @@ const CASOS = [
             window.__posts.push(b);
             // Lo que se envía queda en la planilla falsa: sin esto, un esquema
             // subido por error no se vería en lo que leen los otros dispositivos.
+            // Como el servidor real: la descripción de un movimiento se corta en
+            // 500 (MAX_DESC_LEN); la de una fila de config, no.
+            const corte = (x) => x.type === '__CONFIG__' ? x.description : String(x.description || '').slice(0, 500);
             if (b.action === 'addTransaction') window.__filas.push({ d: String(b.date).slice(0, 10), t: b.type,
-              c: b.category, s: b.subcategory, a: b.amount, desc: b.description, p: b.paymentMethod || '', u: b.uid });
+              c: b.category, s: b.subcategory, a: b.amount, desc: corte(b), p: b.paymentMethod || '', u: b.uid });
             if (b.action === 'addTransactions') (b.txs || []).forEach(x => window.__filas.push({ d: String(x.date).slice(0, 10),
-              t: x.type, c: x.category, s: x.subcategory, a: x.amount, desc: x.description, p: x.paymentMethod || '', u: x.uid }));
+              t: x.type, c: x.category, s: x.subcategory, a: x.amount, desc: corte(x), p: x.paymentMethod || '', u: x.uid }));
             if (b.action === 'updateTransaction') {
               const f = window.__filas.find(r => r.u && r.u === b.uid);
               if (f) Object.assign(f, b.changes);
@@ -589,6 +636,7 @@ const CASOS = [
           }
           if (lecturaFalla) throw new TypeError('Failed to fetch');
           while (!window.__dejarSincronizar) await new Promise(r => setTimeout(r, 50));
+          window.__lecturas = (window.__lecturas || 0) + 1;
           return { ok: true, status: 200, json: async () => window.__filas, text: async () => JSON.stringify(window.__filas) };
         }
         return new Response('', { status: 200 });
@@ -596,8 +644,10 @@ const CASOS = [
     }, { api: caso.api ? API : null, filas: FILAS[caso.filas], cache: caso.cacheEsquema || null,
       origen: caso.cacheOrigen === 'misma' ? API : (caso.cacheOrigen || null),
       cfg: caso.cfgPlanilla ? Object.assign({}, caso.cfgPlanilla, { url: caso.cfgPlanilla.url === 'misma' ? API : caso.cfgPlanilla.url }) : null,
-      lecturaFalla: !!caso.lecturaFalla, liberar: !!caso.liberarSync });
-    await page.goto(file, { waitUntil: 'load' });
+      lecturaFalla: !!caso.lecturaFalla, liberar: !!caso.liberarSync, qrDesde: caso.qrDesde || null });
+    // Con qrDesde, el navegador estaba en otra planilla y se abre el link del
+    // QR de la nueva: el que cambia de planilla es el arranque de la app.
+    await page.goto(caso.qrDesde ? file + '?api=' + encodeURIComponent(API) + '&token=tok' : file, { waitUntil: 'load' });
     await page.waitForTimeout(600);
     let fallas = [];
     if (caso.antes) {

@@ -1147,6 +1147,20 @@
             };
         })();
 
+        /* Antes de cambiar de planilla (QR o ⚙️): anotar de cuál es el caché de
+         * categorías en formato viejo, que no guardaba planilla. Sin esto, la
+         * migración del arranque se lo asignaba a la planilla NUEVA: el primer
+         * QR de otra casa le subía las categorías de la familia. */
+        function _anotarOrigenCacheViejo() {
+            try {
+                const anterior = localStorage.getItem('FINANZAS_API_URL');
+                if (anterior && localStorage.getItem('FINANZAS_SCHEMA')
+                    && !localStorage.getItem('FINANZAS_SCHEMA_ORIGEN')) {
+                    localStorage.setItem('FINANZAS_SCHEMA_ORIGEN', anterior);
+                }
+            } catch (e) { /* sin almacenamiento no hay nada que migrar */ }
+        }
+
         (function handleApiFromUrl() {
             const params = new URLSearchParams(window.location.search);
             const apiParam = params.get('api');
@@ -1159,6 +1173,7 @@
                     safe = u.protocol === 'https:' && u.hostname === 'script.google.com';
                 } catch (e) { safe = false; }
                 if (safe) {
+                    _anotarOrigenCacheViejo();
                     localStorage.setItem('FINANZAS_API_URL', apiParam.trim());
                     /* El token del link se aplica SOLO si tiene forma de token.
                      *
@@ -1736,6 +1751,13 @@
          * plata que pasó del negocio a la casa en ingreso (o ahorro) del hogar.
          * Las convenciones legacy sin marca siguen dependiendo del módulo. */
         const MARCA_EXTRACCION = 'Extracción→Hogar';
+        // El servidor corta la descripción en 500 (MAX_DESC_LEN del .gs). La
+        // marca va al final, así que con un texto largo se perdía en el corte.
+        const MAX_DESC_SERVIDOR = 500;
+        function _conMarcaExtraccion(desc) {
+            const sufijo = (desc ? ' · ' : '') + MARCA_EXTRACCION;
+            return (desc || '').slice(0, MAX_DESC_SERVIDOR - sufijo.length) + sufijo;
+        }
         // Solo la marca: la subcategoría se puede editar, y cambiarla no
         // cambia de dónde vino la plata.
         function _tieneMarcaExtraccion(t) {
@@ -2079,8 +2101,7 @@
 
             const txsToCommit = [newTx];
             if (isExtraction) {
-                const pairTag = MARCA_EXTRACCION;
-                newTx.desc = (newTx.desc ? newTx.desc + ' · ' : '') + pairTag;
+                newTx.desc = _conMarcaExtraccion(currentTx.desc);
                 txsToCommit.push({
                     _uid: _makeTxUid(),
                     d: txDate,
@@ -2088,7 +2109,7 @@
                     c: 'Hogar',
                     s: 'Extracción',
                     a: currentTx.amount,
-                    desc: (currentTx.desc ? currentTx.desc + ' · ' : '') + pairTag,
+                    desc: _conMarcaExtraccion(currentTx.desc),
                     p: payMethod
                 });
             }
@@ -2810,7 +2831,7 @@
             // el negocio el retiro pasaba a contarse como ingreso del hogar.
             if ('desc' in changes && String(tx.desc || '').includes(MARCA_EXTRACCION)
                 && !String(changes.desc || '').includes(MARCA_EXTRACCION)) {
-                changes.desc = (changes.desc ? changes.desc + ' · ' : '') + MARCA_EXTRACCION;
+                changes.desc = _conMarcaExtraccion(changes.desc);
             }
             // Aplicar cambios locales primero
             Object.keys(changes).forEach(k => { tx[k] = changes[k]; });
@@ -3027,6 +3048,7 @@
             });
             if (input === null) return;
             if (input.trim() === '') {
+                _anotarOrigenCacheViejo();
                 localStorage.removeItem('FINANZAS_API_URL');
                 localStorage.removeItem('FINANZAS_API_TOKEN');
                 localStorage.removeItem('FINANZAS_CACHE');
@@ -3053,6 +3075,7 @@
                     + 'dispositivo" desde un teléfono que ya funcione.', 'Ese no es el token');
                 return;
             }
+            _anotarOrigenCacheViejo();
             localStorage.setItem('FINANZAS_API_URL', input.trim());
             if (tok.trim()) localStorage.setItem('FINANZAS_API_TOKEN', tok.trim());
             else localStorage.removeItem('FINANZAS_API_TOKEN');
