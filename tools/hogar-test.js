@@ -12,9 +12,9 @@
  *
  * Contra el cliente v7.7 pasa 1 de 8. El primer caso falla por lo que importa:
  * una instancia nueva veía el negocio y las categorías de la instancia familiar.
- * Contra la v7.8 original (879cb39) pasa 11 de 21; contra la de la primera
- * tanda de arreglos (ef13cc9), 14 de 21: fallan justo los casos que prueban
- * cada arreglo de su revisión.
+ * Contra la v7.8 original (879cb39) pasa 11 de 26; contra la primera tanda
+ * de arreglos (ef13cc9), 16 de 26; contra la segunda (4643b54), 21 de 26:
+ * fallan justo los casos que prueban cada arreglo de su revisión.
  */
 const { chromium } = require('/opt/homebrew/lib/node_modules/playwright');
 const path = require('path');
@@ -49,6 +49,14 @@ const FILAS = {
     cfg('2026-09-20', 'schema', '%%%no-es-base64%%%'),
   ],
   soloCorrupta: [cfg('2026-09-20', 'schema', '%%%no-es-base64%%%')],
+  // Renombrado y después «Restaurar defaults» guardado con el esquema dañado:
+  // los alias nuevos ya no reconocen el nombre del esquema legible anterior.
+  renombradaYCorrupta: [
+    cfg('2026-09-01', 'schema', b64(ESQUEMA_RENOMBRADO)),
+    cfg('2026-09-01', 'aliases', b64({ 'Mar de Pan': 'La Panadería' })),
+    cfg('2026-09-20', 'schema', '%%%no-es-base64%%%'),
+    cfg('2026-09-20', 'aliases', b64({ 'MarDePan': 'Mar de Pan' })),
+  ],
   // El negocio ya renombrado en otro dispositivo: esquema y alias llegan juntos.
   renombrada: [
     cfg('2026-09-01', 'schema', b64(ESQUEMA_RENOMBRADO)),
@@ -61,6 +69,21 @@ const FILAS = {
     { d: ANIO + '-01-10', t: 'Ingreso', c: 'Hogar', s: 'Extracción', a: 150000, desc: 'retiro · Extracción→Hogar', p: '', u: 'e2' },
     { d: ANIO + '-01-11', t: 'Egreso', c: 'HogarYVida', s: 'Familia', a: 50000, desc: 'x', p: '', u: 'e3' },
   ],
+};
+
+// El par de una extracción: un egreso del negocio y un ingreso al hogar, por
+// el mismo importe, con uid distintos y los dos marcados. Contar movimientos
+// no alcanza: pasaba con el ingreso en $0.
+const PAR_COMPLETO = (m) => {
+  const eg = m.find(x => x.type === 'Egreso'), ing = m.find(x => x.type === 'Ingreso');
+  return [
+    [m.length === 2, 'tienen que salir dos movimientos (salieron ' + m.length + ')'],
+    [!!eg && !!ing, 'uno tiene que ser egreso y el otro ingreso'],
+    [!!ing && ing.category === 'Hogar' && ing.subcategory === 'Extracción', 'el ingreso va a Hogar / Extracción'],
+    [!!eg && !!ing && Number(eg.amount) === 1000 && Number(ing.amount) === 1000, 'los dos por el importe cargado ($1000)'],
+    [!!eg && !!ing && eg.uid && ing.uid && eg.uid !== ing.uid, 'uid propios y distintos'],
+    [m.every(x => /Extracción→Hogar/.test(x.description || '')), 'los dos con la marca de la extracción'],
+  ];
 };
 
 // ¿Algún esquema enviado a la planilla viene SIN el negocio? Es lo que apaga la casa.
@@ -204,10 +227,7 @@ const CASOS = [
       }, b64(ESQUEMA_SOLO_HOGAR));
       await page.waitForTimeout(1000);
     },
-    ver: (e, x) => [
-      [x.movimientos.length === 2, 'tienen que salir dos movimientos, el egreso y su ingreso al hogar (salieron ' + x.movimientos.length + ')'],
-      [x.movimientos.some(m => m.type === 'Ingreso' && m.category === 'Hogar' && m.subcategory === 'Extracción'), 'falta el ingreso al hogar del par'],
-    ],
+    ver: (e, x) => PAR_COMPLETO(x.movimientos),
     extra: (page) => page.evaluate(() => ({
       movimientos: window.__posts.filter(b => b.type !== '__CONFIG__')
         .flatMap(b => b.action === 'addTransactions' ? b.txs : [b]),
@@ -310,7 +330,7 @@ const CASOS = [
   },
   {
     nombre: 'Con esquema guardado y la primera lectura falla → guardar sube la edición, no la pierde',
-    api: true, filas: 'familiar', lecturaFalla: true, cacheEsquema: ESQUEMA_FAMILIAR, liberarSync: true,
+    api: true, filas: 'familiar', lecturaFalla: true, cacheEsquema: ESQUEMA_FAMILIAR, cacheOrigen: 'misma', liberarSync: true,
     accion: async (page) => {
       await page.evaluate(async () => {
         window.uiAlert = async () => {};
@@ -354,7 +374,7 @@ const CASOS = [
       }, { personal: b64(ESQUEMA_FAMILIAR), aliasDefault: b64({ 'MarDePan': 'Mar de Pan' }) });
       await page.waitForTimeout(1000);
     },
-    ver: (e, x) => [[x.movimientos.length === 2, 'tienen que salir dos movimientos (salieron ' + x.movimientos.length + ')']],
+    ver: (e, x) => PAR_COMPLETO(x.movimientos),
     extra: (page) => page.evaluate(() => ({
       movimientos: window.__posts.filter(b => b.type !== '__CONFIG__')
         .flatMap(b => b.action === 'addTransactions' ? b.txs : [b]),
@@ -380,6 +400,74 @@ const CASOS = [
       avisos: computeInsights('history').map(i => i.text).join(' | '),
     })),
     porque: 'Ocultar el módulo es de pantalla; la plata que pasó del negocio a la casa ya está registrada como transferencia y tiene que seguir siéndolo.',
+  },
+  {
+    nombre: 'Categorías guardadas de OTRA planilla y la primera lectura falla → guardar no envía nada',
+    api: true, filas: 'familiar', lecturaFalla: true, cacheEsquema: ESQUEMA_SOLO_HOGAR,
+    cacheOrigen: 'https://script.google.com/macros/s/AKfycbxOTRA/exec', liberarSync: true,
+    accion: async (page) => {
+      await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
+    },
+    ver: (e, x) => [[x.envios === 0, 'no puede salir ningún envío de config (salieron ' + x.envios + ')']],
+    extra: (page) => page.evaluate(() => ({ envios: window.__posts.filter(b => b.type === '__CONFIG__').length })),
+    porque: 'El mismo navegador usado con dos planillas: las categorías de la de hogar no son de la familiar, y subirlas apagaba el negocio.',
+  },
+  {
+    nombre: 'Categorías guardadas sin saber de qué planilla (anteriores a esta versión) → no cuentan como confirmadas',
+    api: true, filas: 'familiar', lecturaFalla: true, cacheEsquema: ESQUEMA_SOLO_HOGAR, liberarSync: true,
+    accion: async (page) => {
+      await page.evaluate(async () => { window.uiAlert = async () => {}; await saveConfig(); });
+    },
+    ver: (e, x) => [[x.envios === 0, 'no puede salir ningún envío de config (salieron ' + x.envios + ')']],
+    extra: (page) => page.evaluate(() => ({ envios: window.__posts.filter(b => b.type === '__CONFIG__').length })),
+    porque: 'Una copia sin procedencia puede ser de cualquier planilla: se confirma con la primera lectura buena.',
+  },
+  {
+    nombre: 'Se recupera un esquema renombrado viejo → con los alias de su época, no los posteriores',
+    api: true, filas: 'renombradaYCorrupta',
+    ver: (e) => [
+      [e.negocio === true, 'el negocio renombrado tiene que reconocerse con su alias'],
+      [e.navNegocio, 'el botón del negocio tiene que verse'],
+    ],
+    porque: 'Esquema viejo con alias nuevos es una combinación que nunca existió: el negocio quedaba apagado y «Restaurar» elegía el esquema de hogar.',
+  },
+  {
+    nombre: 'Borrar el negocio del borrador, llega una sincronización con el esquema dañado, Restaurar → vuelve el negocio',
+    api: true, filas: 'familiar',
+    accion: async (page) => {
+      await page.evaluate(async () => {
+        window.uiConfirm = async () => true;
+        delete SCHEMA.Egreso['Mar de Pan'];
+        delete SCHEMA.Ingreso['Mar de Pan'];
+        window.__filas.push({ d: '2026-09-30', t: '__CONFIG__', c: 'schema', s: '', a: 0, desc: '%%%no-es-base64%%%', p: '', u: '' });
+        await fetchSync();
+        await restoreDefaults();
+      });
+    },
+    ver: (e) => [[e.negocio === true && e.categorias.includes('Mar de Pan'), 'una lectura ilegible no puede convertir el borrador en lo confirmado']],
+    porque: 'Lo confirmado sale de una config aceptada de la planilla, nunca del borrador de ⚙️.',
+  },
+  {
+    nombre: 'Editar la descripción de una extracción y ocultar el negocio → sigue sin contarse como ahorro',
+    api: true, filas: 'conExtraccion',
+    accion: async (page) => {
+      await page.evaluate(async (sinNegocio) => {
+        await updateTxFromSheet(TRANSACTIONS.find(t => t.u === 'e2'), { desc: 'otra cosa' });
+        await new Promise(r => setTimeout(r, 1500));   // el editor resincroniza a los 1,2 s
+        window.__filas.push({ d: '2026-09-30', t: '__CONFIG__', c: 'schema', s: '', a: 0, desc: sinNegocio, p: '', u: '' });
+        await fetchSync();
+      }, b64(ESQUEMA_SOLO_HOGAR));
+    },
+    ver: (e, x) => [
+      [/otra cosa/.test(x.desc), 'la edición del texto tiene que aplicarse (quedó: ' + x.desc + ')'],
+      [x.ingresoEsExtraccion, 'el ingreso tiene que seguir siendo una transferencia'],
+      [!/ahorrado/.test(x.avisos), 'no puede aparecer ahorro (avisos: ' + x.avisos + ')'],
+    ],
+    extra: (page) => page.evaluate(() => {
+      const t = TRANSACTIONS.find(t => t.u === 'e2');
+      return { desc: t.desc, ingresoEsExtraccion: isExtractionInc(t), avisos: computeInsights('history').map(i => i.text).join(' | ') };
+    }),
+    porque: 'La marca es lo que dice que esa plata vino del negocio: el editor de texto no puede borrarla de paso.',
   },
   {
     nombre: 'Restaurar defaults en instancia nueva → esquema de hogar, no el familiar',
@@ -408,9 +496,10 @@ const CASOS = [
   for (const caso of CASOS) {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const page = await ctx.newPage();
-    await page.addInitScript(({ api, filas, cache, lecturaFalla, liberar }) => {
+    await page.addInitScript(({ api, filas, cache, origen, lecturaFalla, liberar }) => {
       if (api) { localStorage.setItem('FINANZAS_API_URL', api); localStorage.setItem('FINANZAS_API_TOKEN', 'tok'); }
       if (cache) localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(cache));
+      if (origen) localStorage.setItem('FINANZAS_SCHEMA_ORIGEN', origen);
       window.__filas = filas; window.__dejarSincronizar = !cache || liberar;   // con cache, la sync se libera a mano
       window.__posts = [];
       window.fetch = async (u, o) => {
@@ -422,6 +511,10 @@ const CASOS = [
             // subido por error no se vería en lo que leen los otros dispositivos.
             if (b.action === 'addTransaction') window.__filas.push({ d: String(b.date).slice(0, 10), t: b.type,
               c: b.category, s: b.subcategory, a: b.amount, desc: b.description, p: b.paymentMethod || '', u: b.uid });
+            if (b.action === 'updateTransaction') {
+              const f = window.__filas.find(r => r.u && r.u === b.uid);
+              if (f) Object.assign(f, b.changes);
+            }
             return { ok: true, status: 200, text: async () => JSON.stringify({ ok: true, written: 1, writtenUids: [b.uid], skipped: [] }) };
           }
           if (lecturaFalla) throw new TypeError('Failed to fetch');
@@ -430,7 +523,8 @@ const CASOS = [
         }
         return new Response('', { status: 200 });
       };
-    }, { api: caso.api ? API : null, filas: FILAS[caso.filas], cache: caso.cacheEsquema || null, lecturaFalla: !!caso.lecturaFalla, liberar: !!caso.liberarSync });
+    }, { api: caso.api ? API : null, filas: FILAS[caso.filas], cache: caso.cacheEsquema || null,
+      origen: caso.cacheOrigen === 'misma' ? API : (caso.cacheOrigen || null), lecturaFalla: !!caso.lecturaFalla, liberar: !!caso.liberarSync });
     await page.goto(file, { waitUntil: 'load' });
     await page.waitForTimeout(600);
     let fallas = [];

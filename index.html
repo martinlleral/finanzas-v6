@@ -2449,7 +2449,18 @@
         // el de la casa y, en la instancia familiar, apagaría el negocio en
         // todos los dispositivos. Una planilla sin config también confirma:
         // una instancia nueva guarda igual.
-        let _esquemaConfirmado = !IS_DEMO && !!localStorage.getItem('FINANZAS_SCHEMA');
+        // El caché cuenta solo si es de ESTA planilla: el mismo navegador puede
+        // haber usado otra (un QR, una instancia de prueba), y sus categorías no
+        // son las de esta casa. Un caché sin procedencia (anterior a guardarla)
+        // tampoco cuenta: se confirma con la primera lectura buena.
+        const SCHEMA_ORIGEN_KEY = 'FINANZAS_SCHEMA_ORIGEN';
+        function _guardarEsquemaLocal() {
+            localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
+            localStorage.setItem(SCHEMA_ORIGEN_KEY, API_URL);
+        }
+        let _esquemaConfirmado = !IS_DEMO && !!API_URL
+            && !!localStorage.getItem('FINANZAS_SCHEMA')
+            && localStorage.getItem(SCHEMA_ORIGEN_KEY) === API_URL;
         // Si la instancia tiene el negocio según lo confirmado, no según el
         // borrador que se está editando en ⚙️. Lo usa «Restaurar defaults».
         let _negocioConfirmado = _esquemaConfirmado && negocioActivo();
@@ -2482,23 +2493,34 @@
             // y con un sort estable el empate conservaba el orden del sheet →
             // ganaba la config MÁS VIEJA del día.
             configRows.sort((a, b) => String(a.d || '').localeCompare(String(b.d || '')));
-            const latest = { aliases: null };
+            // Posición de cada fila en el orden cronológico: los alias de un
+            // esquema son los guardados con él (saveConfig sube esquema y
+            // después alias), o sea los últimos antes del esquema siguiente.
             const schemaRows = [];
-            for (const r of configRows) {
-                if (r.c === 'schema') schemaRows.push(r);
-                if (r.c === 'aliases') latest.aliases = r;
-            }
+            const aliasRows = [];
+            configRows.forEach((r, pos) => {
+                if (r.c === 'schema') schemaRows.push({ r, pos });
+                if (r.c === 'aliases') aliasRows.push({ r, pos });
+            });
+            const aliasesDeLaEpoca = (i) => {
+                const hasta = i + 1 < schemaRows.length ? schemaRows[i + 1].pos : Infinity;
+                return aliasRows.filter(a => a.pos < hasta).map(a => a.r).pop() || null;
+            };
+            const latest = { aliases: aliasRows.length ? aliasRows[aliasRows.length - 1].r : null };
+            let configAceptada = schemaRows.length === 0;   // planilla sin config
 
             // El aviso va UNA vez por sesión. La fila de config rota queda rota
             // en el sheet hasta que alguien guarde una nueva, así que avisar en
             // cada fetchSync sería un toast permanente e inútil que además tapa
             // los mensajes que sí importan.
-            if (schemaRows.length === 0) _esquemaConfirmado = true;   // planilla sin config
             for (let i = schemaRows.length - 1; i >= 0; i--) {
                 try {
-                    SCHEMA = JSON.parse(b64ToJson(schemaRows[i].desc || ''));
-                    localStorage.setItem('FINANZAS_SCHEMA', JSON.stringify(SCHEMA));
-                    _esquemaConfirmado = true;
+                    SCHEMA = JSON.parse(b64ToJson(schemaRows[i].r.desc || ''));
+                    _guardarEsquemaLocal();
+                    configAceptada = true;
+                    // Un esquema recuperado va con SUS alias: un esquema viejo
+                    // con alias nuevos es una combinación que nunca existió.
+                    latest.aliases = aliasesDeLaEpoca(i);
                     break;
                 } catch (e) {
                     console.warn('Config schema corrupta:', e);
@@ -2525,7 +2547,12 @@
             }
             // Recién acá, con esquema Y alias cargados: un negocio renombrado
             // se reconoce por su alias, y decidir antes lo dejaba escondido.
-            if (_esquemaConfirmado) _negocioConfirmado = negocioActivo();
+            // Lo confirmado sale SOLO de una config aceptada: con el esquema
+            // ilegible, SCHEMA puede ser el borrador de ⚙️, y no lo es.
+            if (configAceptada) {
+                _esquemaConfirmado = true;
+                _negocioConfirmado = negocioActivo();
+            }
             aplicarModulos();
             return txs;
         }
@@ -2578,7 +2605,8 @@
                 amount: 0,
                 description: jsonToB64(data)
             });
-            localStorage.setItem(lsKey, JSON.stringify(data));
+            if (kind === 'schema') _guardarEsquemaLocal();
+            else localStorage.setItem(lsKey, JSON.stringify(data));
             if (r.status !== 'ok') {
                 _toastSync('⚠️ La config quedó guardada en este dispositivo pero no se subió');
             }
@@ -2755,6 +2783,13 @@
             }
             const signature = _txSignature(tx);
             const uid = tx.u || tx._uid || '';
+            // La marca de la extracción dice que esa plata vino del negocio: si
+            // el texto nuevo la borra, se vuelve a poner. Sin ella, al ocultar
+            // el negocio el retiro pasaba a contarse como ingreso del hogar.
+            if ('desc' in changes && String(tx.desc || '').includes(MARCA_EXTRACCION)
+                && !String(changes.desc || '').includes(MARCA_EXTRACCION)) {
+                changes.desc = (changes.desc ? changes.desc + ' · ' : '') + MARCA_EXTRACCION;
+            }
             // Aplicar cambios locales primero
             Object.keys(changes).forEach(k => { tx[k] = changes[k]; });
             processHistory();
@@ -4245,7 +4280,8 @@
                     ? 'Las categorías de la planilla están dañadas y este dispositivo no tiene una copia. '
                       + 'Guardalas desde un dispositivo que ya las tenga.'
                     : 'Todavía no pude leer la planilla, y guardar ahora podría pisar las categorías '
-                      + 'de los otros dispositivos. Cuando haya conexión tocá 🔄 y volvé a guardar.',
+                      + 'de los otros dispositivos. Cuando haya conexión tocá 🔄: vas a ver las categorías '
+                      + 'de la planilla, y lo que cambiaste acá se descarta. Si hace falta, cambialo de nuevo y guardá.',
                     'Primero hay que sincronizar');
                 return;
             }
