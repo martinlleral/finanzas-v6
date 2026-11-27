@@ -86,6 +86,7 @@ node tools/hogar-test.js index.html         # módulos: modo hogar vs instancia 
 node tools/layout-harness.js index.html     # layout — 0 fallas de 105 mediciones
 node tools/smoke-test.js index.html         # flujo end-to-end + calibración tipográfica
 node tools/torta-test.js index.html         # colores de las tortas — 38/38
+node tools/avisos-test.js index.html        # avisos del hogar en impersonal — 4/4
 ```
 
 - **`sync-test.js`** cubre los caminos donde un bug **no se ve**: la transacción se escribe dos veces o desaparece en silencio. Mockea el servidor y verifica el estado real de la cola, el buffer optimista y los POST. Contra el código previo a la v3 pasa **1 de 5** (el primero falla con `filasEnSheet: esperaba 1, hubo 2`, que es el bug reproducido).
@@ -96,7 +97,9 @@ node tools/torta-test.js index.html         # colores de las tortas — 38/38
 - **`torta-test.js`** dibuja las cuatro tortas reales con los tres esquemas del código y mira los colores que quedaron en el gráfico. El color sale del **orden en el menú** (`coloresTorta`), no de un hash del nombre: con 12 colores, el hash hacía chocar dos categorías ya con 5 o 6 porciones. Contra el código anterior (`22e4bdd`) pasa **14 de 37**; contra `38b9057`, que tenía 12 colores, falla solo el hogar de 13 categorías.
 - **`layout-harness.js`**: 7 viewports × 10 vistas × 4 modales, con montos de 9 dígitos tipeados por la ruta real y stress de `$123.456.789`. **Assertion: 0 fallas.** Baseline del 31/7/2026 antes de los fixes: 105.
 
-**Correr los ocho antes de tocar el motor de sync, la auth, el diagnóstico, los módulos o el CSS de layout.** Ojo: `smoke-test.js` y `layout-harness.js` regeneran `shot-375-home.png`; si no cambió nada visual, descartarlo con `git checkout -- shot-375-home.png`.
+- **`avisos-test.js`** mira que los avisos del hogar hablen en impersonal («se gastó», «el patrimonio del hogar»). En un hogar de dos, «gastaste… Aflojá un toque» le llega a quien tenga el teléfono por un gasto que pudo hacer la otra persona. Dos mitades: todos los textos de `_computeInsightsInner` salvo los del negocio (que le hablan a quien lo lleva), y tres escenarios con fecha fija que disparan los avisos con verbo, con un chequeo de **qué** avisos aparecieron para que el léxico no pase solo. Contra `22baddd` pasa **0 de 4**; con los avisos apagados (un mutante), los tres escenarios fallan por cobertura.
+
+**Correr los nueve antes de tocar el motor de sync, la auth, el diagnóstico, los módulos, los avisos o el CSS de layout.** Ojo: `smoke-test.js` y `layout-harness.js` regeneran `shot-375-home.png`; si no cambió nada visual, descartarlo con `git checkout -- shot-375-home.png`.
 
 ## Seguridad: el token
 
