@@ -1890,17 +1890,42 @@
             if (el && summary) el.setAttribute('aria-label', summary);
         }
 
-        // Paleta determinística para charts: misma categoría = mismo color siempre
         const CHART_PALETTE = [
             '#1a4dff', '#c62828', '#2e7d32', '#a76a00',
             '#6a4c93', '#00838f', '#e65100', '#4527a0',
             '#558b2f', '#ad1457', '#01579b', '#4e342e'
         ];
-        function colorFor(label) {
-            let hash = 0;
-            const s = String(label || '');
-            for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0;
-            return CHART_PALETTE[Math.abs(hash) % CHART_PALETTE.length];
+        // Colores de una torta. El color sale del ORDEN EN EL MENÚ (`orden`): la
+        // primera categoría, el primer color; así una categoría tiene el mismo color
+        // mes a mes y en una misma torta no se repite ninguno hasta 12 porciones.
+        // Lo que no está en el menú (nombres históricos) toma el primer color libre
+        // de esa torta, en una segunda pasada para no robarle el suyo a nadie.
+        // Hasta el 27/11/2026 el color salía de un hash del nombre: con 12 colores,
+        // dos categorías chocaban ya con 5 o 6 porciones (Salud = Familia).
+        function coloresTorta(labels, orden) {
+            const n = CHART_PALETTE.length;
+            const pos = (orden || []).map(nfc);
+            const out = new Array(labels.length).fill(null);
+            const usados = new Set();
+            labels.forEach((l, i) => {
+                const k = pos.indexOf(nfc(l));
+                if (k >= 0 && k < n && !usados.has(k)) { out[i] = CHART_PALETTE[k]; usados.add(k); }
+            });
+            labels.forEach((l, i) => {
+                if (out[i]) return;
+                let k = 0;
+                while (k < n && usados.has(k)) k++;
+                if (k < n) { usados.add(k); out[i] = CHART_PALETTE[k]; }
+                else out[i] = CHART_PALETTE[i % n]; // más de 12 porciones: se repite sí o sí
+            });
+            return out;
+        }
+        // El menú de un tipo (Ingreso/Egreso) o de las subcategorías de una categoría.
+        function ordenMenu(type, cat) {
+            const t = (SCHEMA && SCHEMA[type]) || {};
+            if (cat === undefined) return Object.keys(t);
+            const v = t[cat];
+            return Array.isArray(v) ? v : Object.keys(v || {});
         }
 
         // Normalización Unicode NFC: asegura que dos strings visualmente iguales
@@ -3730,7 +3755,7 @@
                     labels: sortedCosts.map(x => x[0]),
                     datasets: [{
                         data: sortedCosts.map(x => x[1]),
-                        backgroundColor: sortedCosts.map(i => colorFor(i[0])),
+                        backgroundColor: coloresTorta(sortedCosts.map(x => x[0]), ordenMenu('Egreso', BIZ_NAME)),
                         borderWidth: 0
                     }]
                 },
@@ -3809,7 +3834,7 @@
                     labels: sortedCosts.map(x => x[0]),
                     datasets: [{
                         data: sortedCosts.map(x => x[1]),
-                        backgroundColor: sortedCosts.map(i => colorFor(i[0])),
+                        backgroundColor: coloresTorta(sortedCosts.map(x => x[0]), ordenMenu('Egreso')),
                         borderWidth: 0
                     }]
                 },
@@ -3861,7 +3886,7 @@
             });
             if (bChart) bChart.destroy();
             bChart = new Chart(document.getElementById('breakChart'), {
-                type: 'doughnut', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
+                type: 'doughnut', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: coloresTorta(sorted.map(i => i[0]), ordenMenu(type)), borderWidth: 0 }] },
                 options: chartDoughnutOptions({ legendPosition: 'bottom' })
             });
             const topBreak = sorted.slice(0, 3).map(c => `${c[0]} ${fmtMoney(c[1])}`).join(', ');
@@ -3914,7 +3939,7 @@
             }
             if (sChart) sChart.destroy();
             sChart = new Chart(document.getElementById('subChart'), {
-                type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: sorted.map(i => colorFor(i[0])), borderWidth: 0 }] },
+                type: 'pie', data: { labels: sorted.map(i => i[0]), datasets: [{ data: sorted.map(i => i[1]), backgroundColor: coloresTorta(sorted.map(i => i[0]), ordenMenu(type, cat)), borderWidth: 0 }] },
                 options: chartDoughnutOptions({ legendPosition: 'bottom' })
             });
             const topSub = sorted.slice(0, 3).map(c => `${c[0]} ${fmtMoney(c[1])}`).join(', ');
