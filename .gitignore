@@ -26,3 +26,6 @@ server/__pycache__/
 HANDOFF*.md
 EMPAQUETADO.md
 foto-*.txt
+
+# Anexos privados de las specs: no se versionan
+*-PRIVADO.md
