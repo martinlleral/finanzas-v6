@@ -1893,11 +1893,14 @@
         const CHART_PALETTE = [
             '#1a4dff', '#c62828', '#2e7d32', '#a76a00',
             '#6a4c93', '#00838f', '#e65100', '#4527a0',
-            '#558b2f', '#ad1457', '#01579b', '#4e342e'
+            '#558b2f', '#ad1457', '#01579b', '#4e342e',
+            // 13 a 16: tonos claros, para que se distingan de los 12 de arriba.
+            // Hacen falta: el primer hogar del piloto llegó con 13 categorías.
+            '#f9a825', '#78909c', '#80cbc4', '#ce93d8'
         ];
         // Colores de una torta. El color sale del ORDEN EN EL MENÚ (`orden`): la
         // primera categoría, el primer color; así una categoría tiene el mismo color
-        // mes a mes y en una misma torta no se repite ninguno hasta 12 porciones.
+        // mes a mes y en una misma torta no se repite ninguno hasta 16 porciones.
         // Lo que no está en el menú (nombres históricos) toma el primer color libre
         // de esa torta, en una segunda pasada para no robarle el suyo a nadie.
         // Hasta el 27/11/2026 el color salía de un hash del nombre: con 12 colores,
@@ -1916,7 +1919,7 @@
                 let k = 0;
                 while (k < n && usados.has(k)) k++;
                 if (k < n) { usados.add(k); out[i] = CHART_PALETTE[k]; }
-                else out[i] = CHART_PALETTE[i % n]; // más de 12 porciones: se repite sí o sí
+                else out[i] = CHART_PALETTE[i % n]; // más porciones que colores: se repite sí o sí
             });
             return out;
         }

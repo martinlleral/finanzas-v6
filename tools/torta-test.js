@@ -8,9 +8,10 @@
  * los colores que quedaron en el gráfico, no los que devolvería una función.
  *
  * Verifica:
- *   1. Ninguna torta de hasta 12 porciones repite un color.
+ *   1. Ninguna torta de hasta 16 porciones (el largo de la paleta) repite un color.
  *   2. Una categoría tiene el mismo color en dos meses con porciones distintas.
  *   3. Un nombre viejo que ya no está en el menú no choca con los del menú.
+ *   4. Un hogar con 13 categorías no repite colores.
  *
  * Uso: node tools/torta-test.js index.html
  *
@@ -73,7 +74,7 @@ const archivo = path.resolve(process.argv[2] || 'index.html');
         }
       }
       for (const [donde, t] of tortas) {
-        if (t.labels.length > 12) continue;
+        if (t.labels.length > CHART_PALETTE.length) continue;
         out.push({ caso: 1, nombre: `${nombre} · ${donde} (${t.labels.length})`, dupes: dupes(t.labels, t.colors) });
       }
 
@@ -96,6 +97,16 @@ const archivo = path.resolve(process.argv[2] || 'index.html');
     renderBreakdown('2026-09', 'Egreso');
     const t3 = leer(bChart);
     out.push({ caso: 3, nombre: 'nombre fuera del menú (HogarYVida) + menú de un hogar', dupes: dupes(t3.labels, t3.colors) });
+    // 4. Un hogar con 13 categorías, todas con gasto en el mismo mes (el primer
+    // hogar del piloto llegó así). Con 12 colores, la 13 repetía la primera.
+    const TRECE = { Egreso: {}, Ingreso: { Ingresos: ['Sueldo'] } };
+    for (let i = 1; i <= 13; i++) TRECE.Egreso['Categoría ' + i] = ['Sub'];
+    SCHEMA = JSON.parse(JSON.stringify(TRECE));
+    TRANSACTIONS = armar(TRECE, '2026-09');
+    processHistory();
+    renderBreakdown('2026-09', 'Egreso');
+    const t4 = leer(bChart);
+    out.push({ caso: 4, nombre: `13 categorías con gasto en el mismo mes (${t4.labels.length})`, dupes: dupes(t4.labels, t4.colors) });
     return out;
   });
 
