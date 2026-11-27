@@ -137,11 +137,22 @@ def armar_filas(c: dict) -> list:
        f"no estaba en este sheet. Toda serie que arranque antes va a mostrar un despegue que es un "
        f"artefacto de registro, no del negocio."])
 
-    A(["4", "El registro reciente puede estar incompleto",
-       (f"La carga cayó {c['delta_3m']}% en los últimos 3 meses completos, así que probablemente "
-        f"falten gastos chicos. La app ya se arregló (los desbordes de pantalla y los movimientos "
-        f"que se perdían), pero el dato viejo no se recupera."
-        if c["delta_3m"] is not None else "Sin datos suficientes para medir la tendencia.")])
+    # El delta tiene signo: positivo es que la carga CRECIÓ. Hasta el 26/11/2026 el
+    # texto decía "cayó" siempre, y con +55% publicaba lo contrario de lo medido.
+    d3 = c["delta_3m"]
+    if d3 is None:
+        A(["4", "El registro puede estar incompleto",
+           "Sin datos suficientes para medir la tendencia."])
+    elif d3 < 0:
+        A(["4", "El registro reciente puede estar incompleto",
+           f"La carga cayó {abs(d3)}% en los últimos 3 meses completos respecto de los 3 anteriores, "
+           f"así que probablemente falten gastos chicos. Antes de leer una baja de gasto, "
+           f"descartar que sea una baja de carga."])
+    else:
+        A(["4", "Los meses viejos tienen menos registro que los nuevos",
+           f"La carga subió {d3}% en los últimos 3 meses completos respecto de los 3 anteriores. "
+           f"Parte de lo que parezca más gasto puede ser más registro: los meses viejos tienen "
+           f"gastos chicos sin cargar, y el dato viejo no se recupera."])
 
     A(["5", "Negocio y hogar conviven en el mismo sheet",
        "Mar de Pan y las finanzas familiares comparten planilla. Antes de analizar hay que decidir "
