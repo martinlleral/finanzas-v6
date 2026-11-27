@@ -144,6 +144,13 @@ no pisa, la prueba no está generando concurrencia suficiente y no prueba nada.
 
 Si P1 o P2 pierden filas, no se escribe directo: vuelve la opción A.
 
+> **Resultado (27/11/2026).** El control pisó 26 de 100. `AppendCells` perdió
+> filas con HTTP 200 en las 5 corridas con dos escritores (8 de 500), y
+> `cierre.py` perdió 3 de 120 escribiendo a la vez. Confirmar leyendo la columna
+> H (4.3, paso 4) detectó las 3 pérdidas de la corrida que lo midió, pero no la
+> fila que `cierre.py` pisó en A–G. Por esta regla corresponde la opción A;
+> decisión pendiente.
+
 ## 3. El conector: la sincronización en un solo lugar
 
 Hoy la conversación con el servidor está repartida en `index.html`:
