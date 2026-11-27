@@ -14,6 +14,7 @@ Aplicación web de finanzas personales para registrar ingresos y egresos, con si
 - **Archivo único**: `index.html` (~4800 líneas). **Line endings LF**, igual que el resto del repo (`core.autocrlf=input`, sin `.gitattributes`). Fue CRLF hasta que se normalizó; la regla que sobrevive es la razón, no el formato: **no correr nada que reescriba los finales de línea de punta a punta** — genera un diff de miles de líneas irrevisable que esconde el cambio real.
 - `server/apps_script.gs` (backend, **LF**) — se despliega a mano copiando y pegando en el editor de Apps Script.
 - `server/dedupe_movimientos.py` — limpieza de duplicados históricos del sheet (dry-run por default).
+- `docs/spec-entrar-con-google.md` — spec del camino B (la app escribe directo en la planilla, sin Apps Script). **Sin construir**: arranca por dos pruebas que deciden si se hace.
 - Vistas: home, historial, tendencias, Mar de Pan, hogar, config, mes, breakdown, sub, confirm
 - Modales: categorías, acciones de tx, diálogo, QR
 - Sin package.json — todo vanilla, sin build step
@@ -42,10 +43,11 @@ movimiento con texto de header pegado en la col G; `getRawData()` la saltea, as�
 que esa fila es invisible para la app. No escribir nada en la fila 1.
 
 ```
-A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago | H uid
+A Fecha | B Tipo | C Categoría | D Subcategoría | E Monto | F Descripción | G Forma de Pago | H uid | I origen
 ```
 
 - **Columna H = uid**: clave de idempotencia. Filas legacy y las que escribe `cierre.py` la tienen vacía → el servidor las trata como "sin idempotencia, escribir siempre".
+- **Columna I = origen**: qué dispositivo escribió la fila (`DEVICE_NAME`, se cambia en ⚙️). Aditiva como la H; las filas de `cierre.py` la tienen vacía.
 - Las filas `__CONFIG__` **no son movimientos**: son el SCHEMA/ALIASES serializados en base64 dentro del campo descripción.
 - El sheet lo escribe **también** `cierre.py --cargar-finanzas` del skill `/cierremdp` (gspread + service account, filas de 7 columnas). No romper ese contrato.
 
